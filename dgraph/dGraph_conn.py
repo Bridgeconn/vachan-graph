@@ -199,7 +199,7 @@ class dGraph_conn:
 			variables = {'$a': 'Alice'}
 		# print('variables:',variables)
 		try:
-			res = self.client.query(query, variables=variables)
+			res = self.client.txn(read_only=True).query(query, variables=variables)
 		except Exception as e:
 			print('**************Error***********')
 			print('variables:',variables)
