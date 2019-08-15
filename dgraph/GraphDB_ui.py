@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 from dGraph_conn import dGraph_conn
 import pymysql
 import csv, json
+import spacy
 
 rel_db_name = 'AutographaMT_Staging'
 
@@ -897,39 +898,71 @@ plain_search_query = '''
 			                book:book
 	}	}	}	}	}
 '''
+
 @app.route('/dgraph/ask/<search_query>',methods=["GET"])
 def smart_search(search_query):
 	global graph_conn
 
-	search_term = search_query.replace(" ","_")
-
-	smart_search_res = graph_conn.query_data(smart_search_query,{'$word':search_term})
-	over_search_res = graph_conn.query_data(over_smart_search_query,{'$word':search_term})
-	plain_search_res = graph_conn.query_data(plain_search_query,{'$word':search_term})
-	search_res = smart_search_res['verses'] + over_search_res['verses'] + plain_search_res['verses']
-	
+	search_terms = process_query(search_query)
 	result = {}
-	for v in search_res:
-		try:
-			key = (v['book']+" "+str(v['chapter'])+':'+str(v['verse_num']))
-			if key not in result:
-				entry ='\t'+v['text'].replace(v['match_word'],'<strong>'+v['match_word']+'</strong>')+'<br>' 
-				result[key] = entry
-			else:
-				entry =result[key].replace(v['match_word'],'<strong>'+v['match_word']+'</strong>')
-				result[key] = entry
 
-			
-		except Exception as e:
-			print(v)
-			raise e
+	for search_term in search_terms:
+		search_term = search_term.replace(" ","_")
 
+		smart_search_res = graph_conn.query_data(smart_search_query,{'$word':search_term})
+		over_search_res = graph_conn.query_data(over_smart_search_query,{'$word':search_term})
+		plain_search_res = graph_conn.query_data(plain_search_query,{'$word':search_term})
+		search_res = smart_search_res['verses'] + over_search_res['verses'] + plain_search_res['verses']
+		
+		for v in search_res:
+			try:
+				key = (v['book']+" "+str(v['chapter'])+':'+str(v['verse_num']))
+				obj = {'clean_verse': v['text']}
+				if key not in result:
+					result[key] = obj
+					entry ='\t'+v['text'].replace(v['match_word'],'<strong>'+v['match_word']+'</strong>')+'<br>' 
+					result[key]['verse'] = entry
+				else:
+					entry =result[key]['verse'].replace(v['match_word'],'<strong>'+v['match_word']+'</strong>')
+					result[key]['verse'] = entry
 
-	res_str = json.dumps("".join([ key+result[key] for key in result]))
+				
+			except Exception as e:
+				print(v)
+				raise e
+
+	result = sort_result(result,search_query)
+	res_str = json.dumps("".join([ key+result[key]['verse'] for key in result]))
 	return res_str
 
+nlp = spacy.load('en_core_web_md')
 
 
+def process_query(qry):
+	qry_doc = nlp(qry)
+	lemmas = [token.lemma_ for token in qry_doc if not token.is_stop]
+	print('lemmas:',lemmas)
+	return lemmas
+
+# nlp_vec = spacy.load('en_core_web_vec')
+
+def sort_result(result_dict,qry):
+	qry_doc = nlp(qry)
+	for key  in result_dict:
+		clean_text = result_dict[key]['clean_verse']
+		clean_text_doc = nlp(clean_text)
+		result_dict[key]['sim_score'] = qry_doc.similarity(clean_text_doc)
+	
+	sorted_res_list = sorted([(value['sim_score'],key,value) for key,value in result_dict.items()],reverse=True)
+	sorted_result_dict = {}
+	for score,key,value in sorted_res_list:
+		sorted_result_dict[key]=value 
+
+	return sorted_result_dict
+
+
+		
+		
 
 
 if __name__ == '__main__':
