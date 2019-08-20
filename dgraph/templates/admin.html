@@ -105,16 +105,16 @@
             return false;
           });
 
-         $('a#ask').bind('click', function() {
-            qry = document.getElementById("search_words").value
-            $.getJSON('dgraph/ask/'+qry,
-                function(data) {
-                    var res = data
-                    // $('div#search_result').text(res)
-                    document.getElementById('search_result').innerHTML = res
-                 });
-            return false;
-          });
+         // $('a#ask').bind('click', function() {
+         //    qry = document.getElementById("search_words").value
+         //    $.getJSON('dgraph/ask/'+qry,
+         //        function(data) {
+         //            var res = data
+         //            // $('div#search_result').text(res)
+         //            document.getElementById('search_result').innerHTML = res
+         //         });
+         //    return false;
+         //  });
 
 
         });
@@ -192,12 +192,13 @@
 </div>
 
 <div class='container'>
-        <form>
+        <!-- <form>
             <input type="text" id="search_words">
             <a href=# id=ask><button class='btn btn-default'>Smart Search</button></a>
             <br>
             <div id="search_result"></div>
-        </form>
+        </form> -->
+        <a href="/smart_search">Vachan Graph smart_search</a>
 
 </div>
 
