@@ -17,6 +17,17 @@ def main():
 	print(graph_conn)
 	return render_template('admin.html')
 
+@app.route('/smart_search')
+def search_page():
+	global graph_conn
+	graph_conn = dGraph_conn()
+	print(graph_conn)
+	return render_template('smart_search.html')
+
+# @app.route('/images/<filename>')
+# def provide_media(filename):
+# 	file = open('./templates/images/'+filename)
+# 	return file
 
 @app.route('/dgraph/delete-all-nodes')
 def delete_all():
