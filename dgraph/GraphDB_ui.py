@@ -104,7 +104,7 @@ def add_strongs():
 @app.route('/dgraph/add-tws')
 def add_tws():
 	global graph_conn
-	tw_path = '../Neo4j/tws.csv'
+	tw_path = '../neo4j/tws.csv'
 	nodename = 'translation words'
 
 	# create a dictionary nodename
@@ -292,7 +292,7 @@ def add_ugnt_bible():
 	Morph_sequence = ['Role','Type','Mood','Tense','Voice','Person','Case','Gender','Number','Degree']
 	
 
-	cursor.execute("Select LID, Position, Word, Strongs, Morph, Pronunciation, Map.Book, Chapter, Verse,lookup.Book, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(40))
+	cursor.execute("Select LID, Position, Word, Strongs, Morph, Pronunciation, Map.Book, Chapter, Verse,lookup.Book, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(56))
 
 	count_for_test = 0
 	chapNode=None
@@ -625,7 +625,7 @@ def add_alignment():
 	}
 	trg_bib_node_query_res = graph_conn.query_data(bible_query,variables)
 	trg_bibNode_uid = trg_bib_node_query_res['bible'][0]['uid']
-	cursor.execute("Select Book, Chapter, Verse, PositionSrc, PositionTrg, UserId, Stage, Type, UpdatedOn, LidSrc, LidTrg from "+tablename+" JOIN Bcv_LidMap as Map ON LidSrc=Map.ID where Map.Book = %s order by LidSrc, PositionSrc",(40))
+	cursor.execute("Select Book, Chapter, Verse, PositionSrc, PositionTrg, UserId, Stage, Type, UpdatedOn, LidSrc, LidTrg from "+tablename+" JOIN Bcv_LidMap as Map ON LidSrc=Map.ID where Map.Book = %s order by LidSrc, PositionSrc",(56))
 
 	count_for_test = 0
 	while(True):
@@ -971,9 +971,90 @@ def sort_result(result_dict,qry):
 
 	return sorted_result_dict
 
+aligned_to_greek_qry = '''
+	query alignments($bible: string){
+	 alignments(func: has(alignsTo)) @normalize @cascade {
+	  word:word,
+	  position:position,
+	  belongsTo{
+	   lid:lid,
+	   verse:verseText,
+	   belongsTo{
+	   		chapter,
+	   		belongsTo{
+	   			book,
+	   			belongsTo @filter(eq(bible,$bible)){
+	   				bible
+	   			}
+	   		}	
+	   }
+	  },
+	  alignsTo{
+	   Type:Type
+	  }
 
+	 }
+	}
+'''
+
+@app.route('/dgraph/transferPOS/<lang>',methods=["GET"])
+def transfer_POS(lang):		
+	global graph_conn
+
+	if lang == "hin":
+		try:
+			nlp = spacy.load('models/model-final')
+			# pass
+		except Exception as e:
+			print("!!!!!!!Error in loading the model!!!!!!!!!")
+			raise e
+		bible = "Hin 4 bible"
+	elif lang == "eng":
+		bible = "Eng ULB bible"
+
+	all_alignments = graph_conn.query_data(aligned_to_greek_qry,{'$bible':bible})['alignments']
+	file =  open('transferedPOS.csv','w')
+	file.write('lid\tposition\tword\tGreekPOS\tEngPOS\n')
+	prev_lid = 0
+	for alignment in all_alignments:
+		word = alignment['word']
+		position = alignment['position']
+		lid = alignment['lid']
+		verse = alignment['verse']
+		greekTag = alignment['Type']
+
+		if lid != prev_lid:
+			spacyPosTags = []
+			try:
+				verse_doc = nlp(verse)
+			except Exception as e:
+				print('verse:',verse)
+				raise e
+			for token in verse_doc:
+					spacyPosTags.append((token.text,token.tag_))
 		
-		
+		engTag = None
+		if spacyPosTags[position][0] == word:
+			engTag = spacyPosTags[position][1]
+		else:
+			window_start = 0
+			window_end = len(spacyPosTags)-1
+			if position>3:
+				window_start = position-3 
+			if position+4 < window_end:
+				window_end = position+4
+			for pos in range(window_start,window_end):
+				if spacyPosTags[pos][0] == word:
+					engTag = spacyPosTags[pos][1]
+					break
+
+		file.write(str(lid)+'\t'+str(position)+'\t'+str(word)+'\t'+str(greekTag)+'\t'+str(engTag)+'\n')
+	file.close()
+	return "success"
+
+
+
+			
 
 
 if __name__ == '__main__':

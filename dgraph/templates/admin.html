@@ -116,6 +116,22 @@
          //    return false;
          //  });
 
+         $('a#transfer-pos-eng').bind('click', function() {
+            $.getJSON('dgraph/transferPOS/eng',
+                function(data) {
+                    alert(data)
+                 });
+            return false;
+          });
+
+          $('a#transfer-pos-hin').bind('click', function() {
+            $.getJSON('dgraph/transferPOS/hin',
+                function(data) {
+                    alert(data)
+                 });
+            return false;
+          });
+
 
         });
 </script>
@@ -199,6 +215,18 @@
             <div id="search_result"></div>
         </form> -->
         <a href="/smart_search">Vachan Graph smart_search</a>
+
+</div>
+<div class='container'>
+        <form>
+            <a href=# id=transfer-pos-eng><button class='btn btn-default'>Transfer POS from Greek to English</button></a>
+        </form>
+
+</div>
+<div class='container'>
+        <form>
+            <a href=# id=transfer-pos-hin><button class='btn btn-default'>Transfer POS from Greek to Hindi</button></a>
+        </form>
 
 </div>
 
