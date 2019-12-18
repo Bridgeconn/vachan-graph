@@ -281,18 +281,27 @@ def add_ugnt_bible():
 	tablename = 'Grk_UGNT4_BibleWord'
 	bib_name = 'Grk UGNT4 bible'
 
-	# create a dictionary nodename
-	bib_node = { 'bible': bib_name,
-		'language' : 'Greek',
-		'version': "4.0"
-			}
-	bib_node_uid = graph_conn.create_data(bib_node)
-	print(bib_node_uid)
+	bibNode_query_res = graph_conn.query_data(bible_query,{'$name':bib_name})
+	if len(bibNode_query_res['bible']) == 0:
+		# create a bible nodename
+		bib_node = { 'bible': bib_name,
+			'language' : 'Greek',
+			'version': "4.0"
+				}
+		bib_node_uid = graph_conn.create_data(bib_node)
+		print(bib_node_uid)
+	elif len(bibNode_query_res['bible']) > 1:
+		print("matched multiple bible nodes")
+		return
+	else:
+		bib_node_uid = bibNode_query_res['bible'][0]['uid']
+
 
 	Morph_sequence = ['Role','Type','Mood','Tense','Voice','Person','Case','Gender','Number','Degree']
 	
 
-	cursor.execute("Select LID, Position, Word, Strongs, Morph, Pronunciation, Map.Book, Chapter, Verse,lookup.Book, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(56))
+	cursor.execute("Select LID, Position, Word, Strongs, Morph, Pronunciation, Map.Book, Chapter, Verse,lookup.Book, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(40))
+	# cursor.execute("Select LID, Position, Word, Strongs, Morph, Pronunciation, Map.Book, Chapter, Verse,lookup.Book, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID > %s order by LID, Position",(39))
 
 	count_for_test = 0
 	chapNode=None
@@ -439,16 +448,23 @@ def add_bible():
 	tablename = lang+'_'+version+'_BibleWord'
 	bib_name = lang+' '+version+' bible'
 
-	# create a dictionary nodename
-	bib_node = { 'bible': bib_name,
-		'language' : lang,
-		'version': version
-			}
-	bib_node_uid = graph_conn.create_data(bib_node)
-	# bib_node_uid = graph_conn.query_data(bible_query,{'$name':'Eng ULB bible'})['bible'][0]['uid']
-	print(bib_node_uid)
+	bibNode_query_res = graph_conn.query_data(bible_query,{'$name':bib_name})
+	if len(bibNode_query_res['bible']) == 0:
+		# create a bible nodename
+		bib_node = { 'bible': bib_name,
+			'language' : lang,
+			'version': version
+				}
+		bib_node_uid = graph_conn.create_data(bib_node)
+		print(bib_node_uid)
+	elif len(bibNode_query_res['bible']) > 1:
+		print("matched multiple bible nodes")
+		return
+	else:
+		bib_node_uid = bibNode_query_res['bible'][0]['uid']
 
-	cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(56))
+	cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(40))
+	# cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID>%s order by LID, Position",(39))
 	# cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from Eng_ULB_BibleWord JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=40  and LID>=23806 and Position > 18 order by LID, Position")
 
 	count_for_test = 0
@@ -565,7 +581,8 @@ def add_verseTextToBible(bib_node_uid,lang,version):
 
 
 	###### to add text from the text tables in the mysql DB ###############
-	cursor.execute("SELECT LID, main.Verse from "+text_tablename+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID",(56))
+	cursor.execute("SELECT LID, main.Verse from "+text_tablename+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID",(40))
+	# cursor.execute("SELECT LID, main.Verse from "+text_tablename+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID>%s order by LID",(39))
 	next_row = cursor.fetchone()
 	print("Adding text to the bible verse")
 	while next_row:
@@ -624,8 +641,14 @@ def add_alignment():
 	'$name' : trg_bib_name
 	}
 	trg_bib_node_query_res = graph_conn.query_data(bible_query,variables)
-	trg_bibNode_uid = trg_bib_node_query_res['bible'][0]['uid']
-	cursor.execute("Select Book, Chapter, Verse, PositionSrc, PositionTrg, UserId, Stage, Type, UpdatedOn, LidSrc, LidTrg from "+tablename+" JOIN Bcv_LidMap as Map ON LidSrc=Map.ID where Map.Book = %s order by LidSrc, PositionSrc",(56))
+	try:
+		trg_bibNode_uid = trg_bib_node_query_res['bible'][0]['uid']
+	except Exception as e:
+		print("query:",bible_query)
+		print("variable:",variables)
+		raise e
+	cursor.execute("Select Book, Chapter, Verse, PositionSrc, PositionTrg, UserId, Stage, Type, UpdatedOn, LidSrc, LidTrg from "+tablename+" as a JOIN Bcv_LidMap as Map ON LidSrc=Map.ID where Map.Book = %s order by LidSrc, PositionSrc",(40))
+	# cursor.execute("Select Book, Chapter, Verse, PositionSrc, PositionTrg, UserId, Stage, Type, UpdatedOn, LidSrc, LidTrg from "+tablename+" JOIN Bcv_LidMap as Map ON LidSrc=Map.ID where Map.Book >39 %s order by LidSrc, PositionSrc",(39))
 
 	count_for_test = 0
 	while(True):
@@ -670,15 +693,22 @@ def add_alignment():
 		src_wordNode_uid = src_wordNode_query_res['bib_word'][0]['uid']
 
 		trg_wordNode_uid = None
-		variables = {
+
+		variables2 = {
 			'$bib' : trg_bibNode_uid,
 			'$book' : str(BookNum),
 			'$chapter' : str(Chapter),
 			'$verse' : str(Verse),
 			'$pos' : str(PositionTrg)
 		}
-		trg_wordNode_query_res = graph_conn.query_data(bible_word_query,variables)
-		trg_wordNode_uid = trg_wordNode_query_res['bib_word'][0]['uid']
+		try:
+			trg_wordNode_query_res = graph_conn.query_data(bible_word_query,variables2)
+			trg_wordNode_uid = trg_wordNode_query_res['bib_word'][0]['uid']
+		except Exception as e:
+			print('Query:',bible_word_query)
+			print('variables',variables2)
+			print(e)
+			return
 		print('src_wordNode_uid:',src_wordNode_uid)
 		print('trg_wordNode_uid:',trg_wordNode_uid)
 
@@ -710,7 +740,7 @@ def add_eng_wordnet():
 			}
 	dict_node_uid = graph_conn.create_data(dict_node)
 	print(dict_node_uid)
-
+	flag = False
 	for i,word in enumerate(wn.words()):
 		# if i <= 1000:
 		# 	continue
