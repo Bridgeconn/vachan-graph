@@ -17,24 +17,24 @@ class dGraph_conn:
 			<bookNumber>:int @index(int) .
 			<chapter>:int @index(int) .
 			<verse>:int @index(int) .
-			<belongsTo>: uid @reverse .
+			<belongsTo>: [uid] @reverse .
 			<translationWord>: string @index(exact) .
 			<StrongsNumber>: int @index(int) .
 			<position>: int @index(int) .
-			<alignsTo>: uid @reverse .
-			<lemma>: uid @reverse .
+			<alignsTo>: [uid] @reverse .
+			<lemma>: [uid] @reverse .
 			<twType>: string @index(exact) .
 			<tw>: uid @reverse .
 			<word>: string @index(exact) .
 			<synonym_set>: string @index(exact) .
 			<wn_lemma>: string @index(exact) .
 			<dictionary>: string @index(exact) .
-			<wordnet_link>: uid @reverse .
-			<synset>: uid @reverse .
-			<root>: uid @reverse .
+			<wordnet_link>: [uid] @reverse .
+			<synset>: [uid] @reverse .
+			<root>: [uid] @reverse .
 			<lid>: int @index(int) .
-			<hypernym>: uid @reverse .
-			<antonym>: uid @reverse .
+			<hypernym>: [uid] @reverse .
+			<antonym>: [uid] @reverse .
 
 		'''
 
@@ -44,7 +44,8 @@ class dGraph_conn:
 
 	# Create a client stub.
 	def create_client_stub(self):
-		self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
+		# self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
+		self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080')
 
 
 	# Create a client.
@@ -107,6 +108,15 @@ class dGraph_conn:
 
 			# Run mutation.
 			assigned = txn.mutate(set_obj=p)
+			
+			# mu = pydgraph.Mutation(set_json=json.dumps(p).encode('utf8'))
+			# print("half way through")
+			# assigned = txn.mutate(mu)
+
+			# mutation = txn.create_mutation(set_nquads='_:alice <name> "Alice" .')
+			# request = txn.create_request(mutations=[mutation], commit_now=True)
+			# assigned = txn.do_request(request)
+
 
 			# Commit transaction.
 			txn.commit()
@@ -121,54 +131,48 @@ class dGraph_conn:
 			# for uid in assigned.uids:
 				# print('created {} => {}'.format(uid, assigned.uids[uid]))
 		except Exception as e:
-			raise e
+			# raise e
+			print('*'*10)
+			print(e)
+			print('*'*10)
 		finally:
 			# Clean up. Calling this after txn.commit() is a no-op
 			# and hence safe.
 			txn.discard()
 			# print('\n')
-		if assigned.uids['blank-0']:
-			return_res = assigned.uids['blank-0']
+		# print("assigned:",assigned)
+		assigned = list(dict((assigned.uids)).values())
+
+		if assigned:
+			return_res = assigned[0]
 		else:
 			return_res = None
 		return return_res
+		# print(return_res)
+		# return None
 
 
 	#Deleting a data
 	def delete_data(self,uids_to_delete=None):
 		# Create a new transaction.
 		txn = self.client.txn()
+		
 		try:
-			if not uids_to_delete:
-				# for testing
-				uids_to_delete = []
-				query1 = """query all($a: string)
-				{
-				   all(func: eq(name, $a)) 
-					{
-					   uid
-					}   
-				}"""
-				variables1 = {'$a': 'Bob'}
-				res1 = self.client.query(query1, variables=variables1)
-				ppl1 = json.loads(res1.json)
-
-				for person in ppl1['all']:
-					print('Query to find Uid for Bob :')
-					print(query1)
-					print('\n')
-					print("Bob's UID : ")
-					print(person)
-					print('\n')
-					print('Bob deleted')
-					print('\n')
-					uids_to_delete.append(person)
-
 			for uid in uids_to_delete:
-				assigned = txn.mutate(del_obj= uid)
-
+					query1 = """query all($a: string) {
+						all(func: uid($a)) {
+						   uid
+						}
+					}"""
+					print("uid:",uid['uid'])
+					variables1 = {'$a': uid['uid']}
+					res1 = self.client.txn(read_only=True).query(query1, variables=variables1)
+					nodes = json.loads(res1.json)
+					for node in nodes['all']:
+						print("deleting UID: " + node['uid'])
+						txn.mutate(del_obj=node)
+						print('deleted')
 			txn.commit()
-
 		finally:
 			txn.discard()
 
@@ -208,5 +212,7 @@ class dGraph_conn:
 
 
 
-
+if __name__ == '__main__':
+	conn = dGraph_conn()
+	conn.delete_data(["0x3459","0x345a","0x345b","0x345c","0x345d","0x345e","0x345f"])
 
