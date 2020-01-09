@@ -125,10 +125,12 @@ def add_tws():
 			tw = row[1]
 			Type = row[2]
 			word_forms = row[3].split(',')
+			description = row[4]
 			tw_node = {
 				'translationWord':tw,
 				'slNo': sl_no,
 				'twType': Type,
+				'description':description,
 				'belongsTo':{
 				'uid': dict_node_uid
 				}		
@@ -1082,7 +1084,127 @@ def transfer_POS(lang):
 	file.close()
 	return "success"
 
+parallelview_query = '''
+	query verses($book:int, $chapter:int, $verse:int){
+	parallel_verses(func: has(bible)){
+	bible,
+	books: ~belongsTo @filter(eq(bookNumber,$book)) {
+	  book,
+      bookNumber,
+	  chapters:~belongsTo @filter(eq(chapter,$chapter)){
+	  	chapter
+	  	verses:~belongsTo @filter(eq(verse,$verse)){
+        	verse,
+	  		verseText:verseText,
+	  		words: ~belongsTo(orderasc:position){
+	  			position:position,
+	  			word:word
+	}	}  } } } 
+	alignments(func: eq(bible,"Grk UGNT4 bible"))@normalize @cascade{
+		~belongsTo @filter(eq(bookNumber,$book)){
+		 book,
+		 bookNumber,
+		 ~belongsTo @filter(eq(chapter,$chapter)) {
+		   chapter,
+		   ~belongsTo @filter(eq(verse,$verse)){
+		    verse
+		    ~belongsTo{
+		    	grkWord:word,
+		    	grkPosition:position,
+		    	~alignsTo{
+		    		srcWord:word,
+		    		srcPosition:position,
+		    		belongsTo @filter(eq(verse,$verse)){
+		    		 verse,
+		    		 belongsTo @filter(eq(chapter,$chapter)){
+		    		  chapter,
+		    		  belongsTo @filter(eq(bookNumber,$book)){
+		    		    book
+		    		    belongsTo {
+		    		    	srcBible:bible
+	} } } } } } } } } }
+	tws(func: eq(bible,"Grk UGNT4 bible"))@normalize @cascade{
+		~belongsTo @filter(eq(bookNumber,$book)){
+		 book,
+		 bookNumber,
+		 ~belongsTo @filter(eq(chapter,$chapter)) {
+		   chapter,
+		   ~belongsTo @filter(eq(verse,$verse)){
+		    verse
+		    ~belongsTo{
+		    	grkWord:word,
+		    	grkPosition:position,
+		    	tw{
+		    		desc:description
+		    	}
+	} } } } } 
 
+	}
+'''
+
+
+@app.route('/dgraph/parallelview/<bcv>',methods=["GET"])
+def parallel_bible(bcv):
+	global graph_conn
+	graph_conn = dGraph_conn()
+
+	book = bcv[:-6]
+	chapter = bcv[-6:-3]
+	verse = bcv[-3:]
+	# print('book:',book,",chapter:",chapter,',verse:',verse)
+
+	variables = {"$book":str(book),
+				"$chapter":str(chapter),
+				"$verse":str(verse)}
+	parallelview_res = graph_conn.query_data(parallelview_query,variables)
+	alignments = parallelview_res['alignments']
+	translationWords = parallelview_res['tws']
+	output_content = ''
+	for bible in parallelview_res['parallel_verses']:
+		bible_val = bible['bible']
+		if 'books' not in bible:
+			continue
+		for book in bible['books']:
+			book_val = book['book']
+			if 'chapters' not in book:
+				continue
+			for chapter in book['chapters']:
+				chapter_val = chapter['chapter']
+				if 'verses' not in chapter:
+					continue
+				for verse in chapter['verses']:
+					verse_val = verse['verse']
+					verseText = ''
+					# if 'verseText' in verse:
+					#	# This would show verseText with all punctuations
+					# 	verseText = verse['verseText']
+					if verseText == '':
+						words = []
+						for word in verse['words']:
+							algmnt_classes = []
+							infoBoxText = ''
+							if bible_val == 'Grk UGNT4 bible':
+								for i,algmnt in enumerate(alignments):
+									if word['position'] == algmnt['grkPosition']:
+										algmnt_classes.append("class=align"+str(algmnt['grkPosition']))
+										for tw in translationWords:
+											if tw['grkPosition']== algmnt['grkPosition']:
+												infoBoxText += tw['tw']['desc'].replace("\"","&quot;")
+												infoBoxText += tw['tw']['desc']
+							else:
+								for i,algmnt in enumerate(alignments):
+									if algmnt['srcBible'] == bible_val and algmnt['srcPosition'] == word['position']:
+										algmnt_classes.append("class=align"+str(algmnt['grkPosition']))
+										for tw in translationWords:
+											if tw['grkPosition']== algmnt['grkPosition']:
+												infoBoxText += tw['tw']['desc'].replace("\"","&quot;")
+												infoBoxText += tw['tw']['desc']
+							display_word = word['word']
+							words.append("<span "+" ".join(algmnt_classes)+" onmouseover=highlightAlignment(this.getAttribute('class'),this.getAttribute('data-info')) onmouseout=clearHighlight(this.getAttribute('class')) data-info=\""+infoBoxText+"\">"+display_word+"</span>")
+						verseText = ' '.join(words)
+					output_content += '<br>'+ bible_val+'<br>&nbsp;&nbsp;&nbsp;'+book_val+" "+str(chapter_val)+":"+str(verse_val)+"&nbsp;&nbsp;&nbsp;"+verseText+'<br>'
+
+	return render_template('parallel_bible.html',content=output_content)
 
 			
 
