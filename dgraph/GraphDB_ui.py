@@ -1,9 +1,14 @@
 from flask import Flask, render_template, request
 from dGraph_conn import dGraph_conn
+from text_to_uri import standardized_uri
 import pymysql
 import csv, json
 import spacy
+import itertools
+import pandas as pd
+import re, math
 
+conceptnetNumberBatchModel = './models/mini.h5'
 rel_db_name = 'AutographaMT_Staging'
 
 graph_conn = None
@@ -23,6 +28,17 @@ def search_page():
 	graph_conn = dGraph_conn()
 	print(graph_conn)
 	return render_template('smart_search.html')
+
+@app.route('/supersmart_search')
+def conceptsearch_page():
+	global graph_conn
+	graph_conn = dGraph_conn()
+	print(graph_conn)
+	return render_template('concept_search.html')
+
+@app.route('/testpage')
+def loadSomething():
+	return "Something to show its working"
 
 # @app.route('/images/<filename>')
 # def provide_media(filename):
@@ -142,7 +158,13 @@ def add_tws():
 
 	return "success"	
 
-
+dictNode_query = '''
+	query dict($dict_name:string){
+	dict(func: eq(dictionary,$dict_name)){
+		uid
+	}
+	}
+'''
 
 bookNode_query = '''
 		query book($bib: string, $book: string){
@@ -154,12 +176,31 @@ bookNode_query = '''
 		}
 		}
 	'''
-
+allBookNodes_query = '''
+		query book($bib: string){
+		book(func: uid($bib))
+		@normalize {
+				~belongsTo {
+				uid : uid
+				}
+		}
+		}
+	'''
 chapNode_query = '''
 		query book($chap: int, $book: string){
 		chapter(func: uid($book))
 		@normalize {
 				~belongsTo @filter (eq(chapter,$chap)){
+				uid : uid
+				}
+		}
+		}
+	'''
+allChapNodes_query = '''
+		query chapter($book: string){
+		chapter(func: uid($book))
+		@normalize {
+				~belongsTo {
 				uid : uid
 				}
 		}
@@ -176,21 +217,51 @@ verseNode_query = '''
 		}
 		}
 	'''
-
+allVerseNodes_query = '''
+		query verse($chapter: string){
+		verse(func: uid($chapter))
+		@normalize {
+				~belongsTo {
+				uid : uid
+				}
+		}
+		}
+	'''
+allWordNodes_query = '''
+		query word($verse: string){
+		word(func: uid($verse))
+		@normalize {
+				~belongsTo (orderasc: position){
+				uid: uid,
+				word: word
+				}
+		}
+		}
+	'''
 verseNode_withLID_query = '''
 		query verse($bib: string, $lid: int){
 		verse(func: uid($bib))
 		@normalize {
-
 				~belongsTo {
 					~belongsTo{
 						~belongsTo @filter(eq(lid,$lid)){
 						  uid: uid
-						}
-					}
-				}
-		}
-		}
+		}	}	}	}	}
+	'''
+verseNode_withLID_query2 = '''
+		query verse($bib: string, $lid: int){
+		verse(func: eq(bible,$bib))
+		@normalize @cascade{
+				bible:bible,
+				~belongsTo {
+					book:book,
+					~belongsTo{
+						chapter:chapter,
+						~belongsTo @filter(eq(lid,$lid)){
+						  uid: uid,
+						  verse:verse,
+						  verseText:verseText
+		}	}	}	}	}
 	'''
 
 
@@ -274,6 +345,40 @@ lemma_search_query = '''
 	}
 '''
 
+cnTerm_query = '''
+	query terms($term: string){
+	terms(func: eq(cn_term,$term)){
+	uid,
+	cn_term,
+	~verseEmbeddings{
+		verse,
+		verseText,
+		belongsTo{
+			chapter,
+			belongsTo{
+				book,
+				belongsTo{
+				 bible
+				}
+			}
+		}
+	}
+	}
+	}
+
+'''
+
+all_cnTerm_query = '''
+	query terms(){
+	terms(func: has(cn_term)){
+	cn_term,
+	~verseEmbeddings{
+		lid
+	}
+	}
+	}
+
+'''
 
 @app.route('/dgraph/add-ugnt')
 def add_ugnt_bible():
@@ -458,14 +563,14 @@ def add_bible():
 			'version': version
 				}
 		bib_node_uid = graph_conn.create_data(bib_node)
-		print(bib_node_uid)
+		print("created bible node:",bib_node_uid)
 	elif len(bibNode_query_res['bible']) > 1:
 		print("matched multiple bible nodes")
 		return
 	else:
 		bib_node_uid = bibNode_query_res['bible'][0]['uid']
 
-	cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(40))
+	cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(56))
 	# cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID>%s order by LID, Position",(39))
 	# cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from Eng_ULB_BibleWord JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=40  and LID>=23806 and Position > 18 order by LID, Position")
 
@@ -572,6 +677,7 @@ def add_bible():
 	# lang = 'Eng'
 	# version = 'ULB'
 	add_verseTextToBible(bib_node_uid,lang,version)
+	add_wordEmbeddingToBibleVerse(bib_node_uid)
 	return "success"
 
 def add_verseTextToBible(bib_node_uid,lang,version):
@@ -583,7 +689,7 @@ def add_verseTextToBible(bib_node_uid,lang,version):
 
 
 	###### to add text from the text tables in the mysql DB ###############
-	cursor.execute("SELECT LID, main.Verse from "+text_tablename+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID",(40))
+	cursor.execute("SELECT LID, main.Verse from "+text_tablename+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID",(56))
 	# cursor.execute("SELECT LID, main.Verse from "+text_tablename+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID>%s order by LID",(39))
 	next_row = cursor.fetchone()
 	print("Adding text to the bible verse")
@@ -615,7 +721,89 @@ def add_verseTextToBible(bib_node_uid,lang,version):
 	db.close()
 	return "success"
 
-		
+def add_wordEmbeddingToBibleVerse(bib_node_uid):
+	''' this method obtains the one word, two word and three word terms in the bible verses 
+	and checks if it is a conceptnet concept. 
+	If it has, then word embeddings from conceptnet's numberbatch will be added to the verse node''' 
+	global graph_conn
+
+
+	conceptnetNode_query_res = graph_conn.query_data(dictNode_query,{'$dict_name':'Conceptnet Numberbatch'})
+	if len(conceptnetNode_query_res['dict']) == 0:
+		# create a dict node for concept net
+		conceptNetNode = {'dictionary':'Conceptnet Numberbatch'}
+
+		conceptNetNode_uid = graph_conn.create_data(conceptNetNode)
+		print("created conceptnet dictionary node:",conceptNetNode_uid)
+	elif len(conceptnetNode_query_res['dict']) > 1:
+		print("matched multiple conceptnet nodes")
+		return
+	else:
+		conceptNetNode_uid = conceptnetNode_query_res['dict'][0]['uid']
+		print('found Conceptnet node')
+	test_count = 0
+	## traverse the verse nodes of the bible
+	variables = {'$bib':bib_node_uid}
+	book_nodes = graph_conn.query_data(allBookNodes_query,variables)['book']
+	for bookNode_uid in book_nodes:
+		print('new book')
+		variables = {'$book':bookNode_uid['uid']}
+		chap_nodes = graph_conn.query_data(allChapNodes_query,variables)['chapter']
+		for chapNode_uid in chap_nodes:
+			print("new chapter")
+			variables = {'$chapter':chapNode_uid['uid']}
+			verse_nodes = graph_conn.query_data(allVerseNodes_query,variables)['verse']
+			for verseNode in verse_nodes:
+				print("new verse")
+				verseNode_uid = verseNode['uid']
+				variables = {'$verse':verseNode_uid}
+				verse_words_res = graph_conn.query_data(allWordNodes_query,variables)
+				verse_words = [node['word'] for node in verse_words_res['word']]
+				verseTermEmbeddings = []
+				## find possible terms 
+				verseTerms = verse_words
+				verseTerms = verseTerms + [' '.join(verse_words[i:i+2]) for i in range(len(verse_words)-1)]
+				verseTerms = verseTerms + [' '.join(verse_words[i:i+3]) for i in range(len(verse_words)-2)]
+				possible_uris = [standardized_uri('en',term) for term in verseTerms]
+				# print('verseTerms:',verseTerms)
+				# print('possible_uris:',possible_uris)
+				embeds_inVerse = []
+				for uri in possible_uris:
+					try:
+						vec = cn_embeddings.loc[uri] 
+						# print(vec)
+						embeds_inVerse.append((uri.replace('/c/en/',''),vec))
+					except Exception as e:
+						# print("misshit at conceptnet:",uri)
+						pass
+				# print(embeds_inVerse)
+				# print('verseNode_uid:',verseNode_uid)
+
+				for term in embeds_inVerse:
+					termEmbed_uid= None
+					cnTerm_query_res = graph_conn.query_data(cnTerm_query,{'$term':term[0]})
+					if len(cnTerm_query_res['terms'])==0 :
+						termEmbed = {
+							'cn_term':term[0],
+							# 'embedding':term[1],
+							'belongsTo': {'uid':conceptNetNode_uid}}
+						termEmbed_uid = graph_conn.create_data(termEmbed)
+						print("added embedding for: ",term[0])
+					elif len(cnTerm_query_res['terms'])>1:
+						print('multiple term nodes matched for:',term[0])
+						return
+					else:
+						termEmbed_uid = cnTerm_query_res['terms'][0]['uid']
+					verseEmbedslink = {
+						'uid': verseNode_uid,
+						'verseEmbeddings': {'uid':termEmbed_uid}
+					}
+					graph_conn.create_data(verseEmbedslink)
+
+				# test_count +=1
+				# if test_count==10:
+				# 	return
+
 
 @app.route('/dgraph/add-alignment')
 def add_alignment():
@@ -974,12 +1162,15 @@ def smart_search(search_query):
 				print(v)
 				raise e
 
-	result = sort_result(result,search_query)
-	res_str = json.dumps("".join([ key+result[key]['verse'] for key in result]))
+	result = sort_result_spacyBERT(result,search_query)
+	result2 = sort_result_conceptnet(result,search_terms)
+	res_str = "BERT sorted<br>-----------<br>"+"".join([ key+result[key]['verse'] for key in result])
+	res_str += "<br>Conceptnet sorted<br>-----------<br>"+"".join([ key+result2[key]['verse'] for key in result2])
+	res_str = json.dumps(res_str)
 	return res_str
 
 nlp = spacy.load('en_core_web_md')
-
+cn_embeddings = pd.read_hdf(conceptnetNumberBatchModel, 'mat', encoding='utf-8')
 
 def process_query(qry):
 	qry_doc = nlp(qry)
@@ -989,13 +1180,47 @@ def process_query(qry):
 
 # nlp_vec = spacy.load('en_core_web_vec')
 
-def sort_result(result_dict,qry):
+def sort_result_spacyBERT(result_dict,qry):
 	qry_doc = nlp(qry)
 	for key  in result_dict:
 		clean_text = result_dict[key]['clean_verse']
 		clean_text_doc = nlp(clean_text)
 		result_dict[key]['sim_score'] = qry_doc.similarity(clean_text_doc)
 	
+	sorted_res_list = sorted([(value['sim_score'],key,value) for key,value in result_dict.items()],reverse=True)
+	sorted_result_dict = {}
+	for score,key,value in sorted_res_list:
+		sorted_result_dict[key]=value 
+
+	return sorted_result_dict
+
+def sort_result_conceptnet(result_dict,qry_terms):
+	qry_embeddings = []
+	for qt in qry_terms:
+		try:
+			vec = cn_embeddings.loc['/c/en/'+qt.replace(' ','_')] 
+		except Exception as e:
+			print("misshit at conceptnet:",qt)
+		qry_embeddings.append(vec)
+	for key  in result_dict:
+		clean_text = result_dict[key]['clean_verse']
+		verse_words = clean_text.split(' ')
+		verse_terms = verse_words + [verse_words[i]+'_'+verse_words[i+1] for i in range(0,len(verse_words)-1)]
+		verse_embeddings = []
+		for vt in verse_terms:
+			try:
+				vec = cn_embeddings.loc['/c/en/'+vt] 
+				verse_embeddings.append(vec)
+			except Exception as e:
+				print("misshit at conceptnet:",vt)
+		sim_score = 0
+		for qt,vt in itertools.product(qry_embeddings,verse_embeddings):
+			cos = qt.dot(vt)
+			if cos>0:
+				sim_score += cos
+
+		result_dict[key]['sim_score'] = sim_score
+
 	sorted_res_list = sorted([(value['sim_score'],key,value) for key,value in result_dict.items()],reverse=True)
 	sorted_result_dict = {}
 	for score,key,value in sorted_res_list:
@@ -1028,6 +1253,78 @@ aligned_to_greek_qry = '''
 	 }
 	}
 '''
+
+def unit_vec(vec):
+    """
+    Normalize a vector to a unit vector, so that dot products are cosine
+    similarities.
+    
+    If it's the zero vector, leave it as is, so all its cosine similarities
+    will be zero.
+    """
+    dot_prod = abs(vec.dot(vec))
+    norm = math.sqrt(dot_prod)
+    if norm == 0:
+        return vec
+    return vec / norm
+
+@app.route('/dgraph/conceptsearch/<search_query>',methods=["GET"])
+def concept_search(search_query):
+	global graph_conn
+	word_pattern = re.compile(r'\w+',re.UNICODE)
+	qry_words = re.findall(word_pattern,search_query)
+	qry_terms = []
+	qry_terms = qry_words
+	qry_terms = qry_terms + [' '.join(qry_words[i:i+2]) for i in range(len(qry_words)-1)]
+	qry_terms = qry_terms + [' '.join(qry_words[i:i+3]) for i in range(len(qry_words)-2)]
+	possible_uris = [standardized_uri('en',term) for term in qry_terms]
+	qry_embeddings = []
+	for uri in possible_uris:
+		vec = None
+		try:
+			vec = cn_embeddings.loc[uri]
+			qry_embeddings.append(unit_vec(vec))
+		except Exception as e:
+			# raise e
+			pass
+	# print('qry_embeddings:',qry_embeddings)
+	all_cnTerm_query_res = graph_conn.query_data(all_cnTerm_query,{})
+	bible_terms_score = {}
+	for item in all_cnTerm_query_res['terms']:
+		vec = unit_vec(cn_embeddings.loc['/c/en/'+item['cn_term']])
+		score = 0
+		for emb in qry_embeddings:
+			cos = vec.dot(emb)
+			if cos >0:
+				score += cos
+		bible_terms_score[item['cn_term']] = score
+	bible_verses_score = {}
+	for term in bible_terms_score:
+		lids = []
+		score = bible_terms_score[term]
+		for trm in all_cnTerm_query_res['terms']:
+			if trm['cn_term'] == term:
+				lids = [link['lid'] for link in trm['~verseEmbeddings']]
+			for lid in lids:
+				if lid in bible_verses_score:
+					bible_verses_score[lid] += score
+				else:
+					bible_verses_score[lid] = score
+	bible_verses_sorted = sorted(bible_verses_score, key=bible_verses_score.get,reverse=True)[:10]
+	# print(bible_verses_sorted)
+	result_str = ''
+	for lid in bible_verses_sorted:
+		verse_res = graph_conn.query_data(verseNode_withLID_query2,{'$bib':'Eng ULB bible','$lid':str(lid)})
+		try:
+			bcv = verse_res['verse'][0]['book']+' '+str(verse_res['verse'][0]['chapter'])+':'+str(verse_res['verse'][0]['verse'])
+		except Exception as e:
+			print(verse_res)
+			raise e
+		verseText = verse_res['verse'][0]['verseText']
+		result_str += '<br>'+bcv+'&nbsp;'+verseText
+
+	return json.dumps(result_str)
+
 
 @app.route('/dgraph/transferPOS/<lang>',methods=["GET"])
 def transfer_POS(lang):		

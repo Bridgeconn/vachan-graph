@@ -35,6 +35,8 @@ class dGraph_conn:
 			<lid>: int @index(int) .
 			<hypernym>: [uid] @reverse .
 			<antonym>: [uid] @reverse .
+			<verseEmbeddings>: [uid] @reverse .
+			<cn_term>: string @index(exact) .
 
 		'''
 
@@ -44,8 +46,8 @@ class dGraph_conn:
 
 	# Create a client stub.
 	def create_client_stub(self):
-		# self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
-		self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080')
+		self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
+		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080')
 
 
 	# Create a client.
