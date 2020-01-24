@@ -46,8 +46,9 @@ class dGraph_conn:
 
 	# Create a client stub.
 	def create_client_stub(self):
-		self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
+		# self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
 		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080')
+		self.client_stub = pydgraph.DgraphClientStub('139.59.90.184:9080')
 
 
 	# Create a client.
