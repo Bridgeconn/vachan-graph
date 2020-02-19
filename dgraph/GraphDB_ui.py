@@ -7,6 +7,7 @@ import spacy
 import itertools
 import pandas as pd
 import re, math
+from sklearn.neighbors import NearestNeighbors
 
 conceptnetNumberBatchModel = './models/mini.h5'
 rel_db_name = 'AutographaMT_Staging'
@@ -222,7 +223,10 @@ allVerseNodes_query = '''
 		verse(func: uid($chapter))
 		@normalize {
 				~belongsTo {
-				uid : uid
+				uid : uid,
+				verseEmbeddings(first:1){
+					verseEmbeddings:uid
+				}
 				}
 		}
 		}
@@ -369,14 +373,12 @@ cnTerm_query = '''
 '''
 
 all_cnTerm_query = '''
-	query terms(){
+	query terms($something: string){
 	terms(func: has(cn_term)){
 	cn_term,
 	~verseEmbeddings{
 		lid
-	}
-	}
-	}
+	}	}	}
 
 '''
 
@@ -756,6 +758,9 @@ def add_wordEmbeddingToBibleVerse(bib_node_uid):
 			for verseNode in verse_nodes:
 				print("new verse")
 				verseNode_uid = verseNode['uid']
+				if 'verseEmbeddings' in verseNode:
+					print("Embedding already added. Skipping the verse!")
+					continue
 				variables = {'$verse':verseNode_uid}
 				verse_words_res = graph_conn.query_data(allWordNodes_query,variables)
 				verse_words = [node['word'] for node in verse_words_res['word']]
@@ -1163,14 +1168,53 @@ def smart_search(search_query):
 				raise e
 
 	result = sort_result_spacyBERT(result,search_query)
+	# result2 = sort_result_conceptnet(result,search_terms)
+	res_str = "BERT sorted<br>-----------<br>"+"".join([ key+result[key]['verse'] for i,key in enumerate(result) if i<10])
+	# res_str += "<br>Conceptnet sorted<br>-----------<br>"+"".join([ key+result2[key]['verse'] for key in result2])
+	res_str = json.dumps(res_str)
+	return res_str
+
+ 
+@app.route('/dgraph/ask2/<search_query>',methods=["GET"])
+def smart_search2(search_query):
+	global graph_conn
+
+	search_terms = process_query(search_query)
+	result = {}
+
+	for search_term in search_terms:
+		search_term = search_term.replace(" ","_")
+
+		smart_search_res = graph_conn.query_data(smart_search_query,{'$word':search_term})
+		over_search_res = graph_conn.query_data(over_smart_search_query,{'$word':search_term})
+		plain_search_res = graph_conn.query_data(plain_search_query,{'$word':search_term})
+		search_res = smart_search_res['verses'] + over_search_res['verses'] + plain_search_res['verses']
+		
+		for v in search_res:
+			try:
+				key = (v['book']+" "+str(v['chapter'])+':'+str(v['verse_num']))
+				obj = {'clean_verse': v['text']}
+				if key not in result:
+					result[key] = obj
+					entry ='\t'+v['text'].replace(v['match_word'],'<strong>'+v['match_word']+'</strong>')+'<br>' 
+					result[key]['verse'] = entry
+				else:
+					entry =result[key]['verse'].replace(v['match_word'],'<strong>'+v['match_word']+'</strong>')
+					result[key]['verse'] = entry
+
+				
+			except Exception as e:
+				print(v)
+				raise e
+
+	# result = sort_result_spacyBERT(result,search_query)
 	result2 = sort_result_conceptnet(result,search_terms)
-	res_str = "BERT sorted<br>-----------<br>"+"".join([ key+result[key]['verse'] for key in result])
-	res_str += "<br>Conceptnet sorted<br>-----------<br>"+"".join([ key+result2[key]['verse'] for key in result2])
+	# res_str = "BERT sorted<br>-----------<br>"+"".join([ key+result[key]['verse'] for key in result])
+	res_str = "<br>Conceptnet sorted<br>-----------<br>"+"".join([ key+result2[key]['verse'] for i,key in enumerate(result2) if i<10 ])
 	res_str = json.dumps(res_str)
 	return res_str
 
 nlp = spacy.load('en_core_web_md')
-cn_embeddings = pd.read_hdf(conceptnetNumberBatchModel, 'mat', encoding='utf-8')
 
 def process_query(qry):
 	qry_doc = nlp(qry)
@@ -1199,9 +1243,9 @@ def sort_result_conceptnet(result_dict,qry_terms):
 	for qt in qry_terms:
 		try:
 			vec = cn_embeddings.loc['/c/en/'+qt.replace(' ','_')] 
+			qry_embeddings.append(vec)
 		except Exception as e:
 			print("misshit at conceptnet:",qt)
-		qry_embeddings.append(vec)
 	for key  in result_dict:
 		clean_text = result_dict[key]['clean_verse']
 		verse_words = clean_text.split(' ')
@@ -1263,9 +1307,13 @@ def unit_vec(vec):
     will be zero.
     """
     dot_prod = abs(vec.dot(vec))
-    norm = math.sqrt(dot_prod)
-    if norm == 0:
+    if dot_prod == 0:
         return vec
+    try:
+	    norm = dot_prod ** 0.5
+    except Exception as e:
+    	print("**************\ndot_prod:",dot_prod,"\n*****************")
+    	return vec
     return vec / norm
 
 @app.route('/dgraph/conceptsearch/<search_query>',methods=["GET"])
@@ -1288,7 +1336,8 @@ def concept_search(search_query):
 			# raise e
 			pass
 	# print('qry_embeddings:',qry_embeddings)
-	all_cnTerm_query_res = graph_conn.query_data(all_cnTerm_query,{})
+	all_cnTerm_query_res = graph_conn.query_data(all_cnTerm_query,{'$something':"so"})
+	# print("all_cnTerm_query_res:",all_cnTerm_query_res)
 	bible_terms_score = {}
 	for item in all_cnTerm_query_res['terms']:
 		vec = unit_vec(cn_embeddings.loc['/c/en/'+item['cn_term']])
@@ -1324,6 +1373,85 @@ def concept_search(search_query):
 		result_str += '<br>'+bcv+'&nbsp;'+verseText
 
 	return json.dumps(result_str)
+
+cn_embeddings = pd.read_hdf(conceptnetNumberBatchModel, 'mat', encoding='utf-8')
+en_uris = [lab for lab in cn_embeddings.index if '/c/en/' in lab]
+en_cnembeddings = cn_embeddings[cn_embeddings.index.isin(en_uris)]
+
+# nn_model = NearestNeighbors(n_neighbors=10)
+# nn_model.fit(en_cnembeddings)
+
+concept_search_query = '''
+	query verses($term: string){
+		verses(func: eq(cn_term,$term)) @normalize @cascade{
+			cn_term:cn_term,
+			~verseEmbeddings{
+				verseText:verseText,
+				verseNumber:verse,
+				belongsTo{
+					chapter:chapter,
+					belongsTo{
+						book:book
+	}	}	}	}	}
+'''
+
+
+@app.route('/dgraph/conceptsearch2/<search_query>',methods=["GET"])
+def concept_search2(search_query):
+	global graph_conn
+	word_pattern = re.compile(r'\w+',re.UNICODE)
+	qry_words = re.findall(word_pattern,search_query)
+	qry_terms = []
+	qry_terms = qry_words
+	qry_terms = qry_terms + [' '.join(qry_words[i:i+2]) for i in range(len(qry_words)-1)]
+	qry_terms = qry_terms + [' '.join(qry_words[i:i+3]) for i in range(len(qry_words)-2)]
+	qry_embeddings = []
+	related_cnterms = [] 
+	for trm in qry_terms:
+		vec = None
+		possible_uri = standardized_uri('en',trm) 
+		try:
+			vec = en_cnembeddings.loc[possible_uri]
+			qry_embeddings.append(unit_vec(vec))
+			related_cnterms.append(possible_uri.split('/')[-1])
+		except Exception as e:
+			# raise e
+			# print(trm,":ignores Exception")
+			# print(e)
+			pass
+	for embed in qry_embeddings:
+		nearestvects = nn_model.kneighbors([embed],30)
+		related_cnterms += [(en_cnembeddings.index[index].split('/')[-1],nearestvects[0][0][i]) for i,index in enumerate(nearestvects[1][0])]
+	verses = {}
+	for term in related_cnterms:
+		# print(term[0])
+		concept_search_res = graph_conn.query_data(concept_search_query,{'$term':term[0]})
+		# print(concept_search_res)
+		for ver in concept_search_res['verses']:
+			ref = ver['book']+ ' '+str(ver['chapter'])+":"+str(ver['verseNumber'])
+			# print(ref)
+			if ref in verses:
+				try:
+					verses[ref]['distscore'] += term[1]
+					# pass
+				except Exception as e:
+					print("verses[ref]['distscore']:",verses[ref]['distscore'])
+					if term[1] == 'n':
+						pass
+					else:
+						raise e
+			else:
+				distscore = 0.0
+				if type(term[1]) == 'numpy.float64':
+					distscore = term[1]
+					print(term[1])
+				verses[ref] = {'verseText':ver['verseText'], 'distscore':distscore}
+	sorted_verses = {k:v for k,v in sorted(verses.items(), key=lambda x: x[1]['distscore'])}
+	result_str = ''
+	for item in list(sorted_verses)[:10]:
+		result_str +='<br>'+item+"&nbsp;"+sorted_verses[item]['verseText']
+	return json.dumps(result_str)
+
 
 
 @app.route('/dgraph/transferPOS/<lang>',methods=["GET"])
@@ -1503,8 +1631,329 @@ def parallel_bible(bcv):
 
 	return render_template('parallel_bible.html',content=output_content)
 
-			
+collection_query = '''
+	query collection($name:string, $lang:string){
+	collection(func: eq(collection,$name)) @filter(eq(language,$lang)) {
+		uid: uid
+	}	}
+'''
+
+bcv_query = '''
+	query verse($bible:string, $book:string, $chapter:int, $verse:int){
+	verse(func: eq(bible,$bible)) @normalize @cascade{
+		~belongsTo @filter(eq(book,$book)){
+		 ~belongsTo @filter(eq(chapter,$chapter)){
+		 	~belongsTo @filter(eq(verse,$verse)){
+		 		uid:uid
+	}}}}}
+'''
+
+bcv_range_query = '''
+	query verses($bible:string, $book:string, $chapter:int, $versestart:int, $verseend:int){
+	verses(func: eq(bible,$bible)) @normalize @cascade{
+		~belongsTo @filter(eq(book,$book)){
+		 ~belongsTo @filter(eq(chapter,$chapter)){
+		 	~belongsTo @filter(ge(verse,$versestart) AND le(verse,$verseend)){
+		 		uid:uid
+	}}}}}
+'''
+
+def findAllVerseNodesInRange(reference):
+	global graph_conn
+	refRangePattern = re.compile(r'(\d? *\w+) +(\d+) *: *(\d+)(-\d+)?')
+	verse_uids = []
+	if re.match(refRangePattern,reference):
+		matchObjs = re.findall(refRangePattern,reference)
+		bookname,chapter,startVerse,endVerse = matchObjs[0]
+		if endVerse == "":
+			endVerse = startVerse
+		else:
+			endVerse = endVerse.replace('-','')
+		startVerse = int(startVerse)
+		endVerse = int(endVerse)
+		for v in range(startVerse,endVerse+1):
+			variable = {'$bible':"Eng ULB bible",'$book':bookname, '$chapter':chapter, "$verse":str(v)}
+			bcv_query_res = graph_conn.query_data(bcv_query,variable)
+			if len(bcv_query_res['verse']) == 0:
+				print("no verse found for ",variable)
+			elif len(bcv_query_res['verse']) > 1:
+				print("more than one verse found for ",variable)
+			else:
+				verse_uids.append(bcv_query_res['verse'][0]['uid'])
+	else:
+		print("************Couldn't parse the reference:",reference)
+	# print(verse_uids)
+	return verse_uids
+
+def findAllVerseNodesInRange2(references):
+	global graph_conn
+	verse_uids = []
+	refRangePattern = re.compile('from (I* *[A-Za-z ]+) *(\d+) *: *(\d+) to (I* *[A-Za-z ]+) *(\d+) *: *(\d+)')
+	matchObjs = re.findall(refRangePattern,references)
+	if len(matchObjs)==0:
+		print("************Couldn't parse the reference:",reference)
+	else:
+		book1,chap1, ver1, book2, chap2, ver2  = matchObjs[0]
+		book1 = book1.strip()
+		book2 = book2.strip()
+		if book1.startswith('II '):
+			book1 = book1.replace('II ','2 ')
+		elif book1.startswith('I '):
+			book1 = book1.replace('I ','1 ')
+		elif book1.startswith("Revelation"):
+			book1 = "Revelation"
+		if book2.startswith('II '):
+			book2 = book2.replace('II ','2 ')
+		elif book2.startswith('I '):
+			book2 = book2.replace('I ','1 ')
+		elif book2.startswith("Revelation"):
+			book2 = "Revelation"
+		print(book1,chap1, ver1, book2, chap2, ver2)
+		if chap1 == chap2:
+			variable = {'$bible':"Eng ULB bible",'$book':book1, '$chapter':chap1, "$versestart":ver1, "$verseend":ver2}
+			bcv_range_query_res = graph_conn.query_data(bcv_range_query,variable)
+			verse_uids = [item['uid'] for item in bcv_range_query_res['verses']]
+			# print(bcv_range_query_res['verses'])
+		else:
+			variable = {'$bible':"Eng ULB bible",'$book':book1, '$chapter':chap1, "$versestart":ver1, "$verseend":'200'}
+			bcv_range_query_res1 = graph_conn.query_data(bcv_range_query,variable)
+			verse_uids = [item['uid'] for item in bcv_range_query_res1['verses']]
+			variable = {'$bible':"Eng ULB bible",'$book':book1, '$chapter':chap2, "$versestart":'1', "$verseend":ver2}
+			bcv_range_query_res2 = graph_conn.query_data(bcv_range_query,variable)
+			verse_uids = verse_uids + [item['uid'] for item in bcv_range_query_res2['verses']]
+	return verse_uids
+
+
+@app.route('/dgraph/add-translationQuestions',methods=["GET"])
+def addTransQuestions():
+	global graph_conn
+	graph_conn = dGraph_conn()
+	tq_path = './Resources/translationQuestions/tQuestionsEnglish.csv'
+	collection_name = 'Translation Questions'
+	language = 'English'
+
+	# create a collection if doesn't exist
+	coll_node_uid = None
+	coll_node_query_res = graph_conn.query_data(collection_query,{'$name':collection_name,'$lang':language})
+	if len(coll_node_query_res['collection']) == 0:
+		coll_node = { 'collection': collection_name, 'language':language	}
+		coll_node_uid = graph_conn.create_data(coll_node)
+		print("creating new node for ",collection_name)
+	elif len(coll_node_query_res['collection']) > 1:
+		print("Error!!! More than one node matched for ",collection_name)
+	else:
+		print(coll_node_query_res)
+		coll_node_uid = coll_node_query_res['collection'][0]['uid']
+	print("coll_node_uid:",coll_node_uid)
+
+	count_for_test = 0
+	with open(tq_path) as csv_file:
+		csv_reader = csv.reader(csv_file, delimiter='\t')
+		next(csv_reader)
+		for row in csv_reader:
+			sl_no,question,answer,references = row[0:4]
+			sl_no = int(sl_no)
+			# if sl_no < 57000 or sl_no > 58000:
+			if sl_no < 41000 or sl_no > 45000:
+				continue
+			print(sl_no,question)
+			verseuids =  findAllVerseNodesInRange(references)
+			question_node = {
+				'question':question,
+				'answer':answer,
+				'belongsTo':{'uid':coll_node_uid},
+				'referenceVerse':[{'uid':uid} for uid in verseuids]
+			} 
+			question_node_uid = graph_conn.create_data(question_node)
+	return "success"
+
+
+@app.route('/dgraph/add-biblestories',methods=["GET"])
+def addBibleStories():
+	global graph_conn
+	graph_conn = dGraph_conn()
+	tq_path = './Resources/Bible Stories/BibleStriesEnglish.csv'
+	collection_name = 'Bible Stories'
+	language = 'English'
+
+	# create a collection if doesn't exist
+	coll_node_uid = None
+	coll_node_query_res = graph_conn.query_data(collection_query,{'$name':collection_name,'$lang':language})
+	if len(coll_node_query_res['collection']) == 0:
+		coll_node = { 'collection': collection_name	, 'language':language}
+		coll_node_uid = graph_conn.create_data(coll_node)
+		print("creating new node for ",collection_name)
+	elif len(coll_node_query_res['collection']) > 1:
+		print("Error!!! More than one node matched for ",collection_name)
+	else:
+		print(coll_node_query_res)
+		coll_node_uid = coll_node_query_res['collection'][0]['uid']
+	print("coll_node_uid:",coll_node_uid)
+
+	# count_for_test = 0
+	# with open(tq_path) as csv_file:
+	# 	csv_reader = csv.reader(csv_file, delimiter='\t')
+	# 	next(csv_reader)
+	# 	for row in csv_reader:
+	# 		sl_no,title,story,references, images = row[0:5]
+	# 		# if sl_no < 41000 or sl_no > 45000:
+	# 		if int(sl_no) < 22 or int(sl_no) > 42:
+	# 			continue
+	# 		references = references.split(', ')
+	# 		verse_uids = []
+	# 		for ref_range in references:
+	# 			verse_uids = verse_uids + findAllVerseNodesInRange2(ref_range)
+	# 		print(sl_no,title)
+	# 		story_node = {
+	# 			'title':title,
+	# 			'story':story,
+	# 			'belongsTo':{'uid':coll_node_uid},
+	# 			'referenceVerse':[{'uid':uid} for uid in verse_uids],
+	# 			'images':images
+	# 		} 
+	# 		story_node_uid = graph_conn.create_data(story_node)
+	addBibleStoryQuestions(coll_node_uid)
+	return "success"
+
+bStory_query = '''
+	query story($colluid:string, $tit:string){
+		story(func: eq(title,$tit)) @normalize @cascade{
+			uid: uid,
+			belongsTo @filter(uid($colluid)){
+				collection
+			}
+
+	}}
+'''
+
+def addBibleStoryQuestions(collection_uid):
+	global graph_conn
+	path ='./Resources/Bible Stories/BibleStroyQuestions_English.csv'
+	count = 0
+	qa_pattern = re.compile(r'<<QUESTION>>: (.*)<<ANSWER>>: (.*)')
+
+	with open(path) as csv_file:
+		csv_reader = csv.reader(csv_file, delimiter='\t')
+		next(csv_reader)
+		for row in csv_reader:
+			sl_no,title,summary,qa_list = row[0:4]
+
+			variable = {"$colluid":collection_uid ,"$tit":title}
+			bStory_query_res = graph_conn.query_data(bStory_query,variable)
+			if len(bStory_query_res['story'])==1:
+				count += 1
+				print(count,title)
+				story_uid = bStory_query_res['story'][0]['uid']
+				qa_list = qa_list.split("|||")[:-1]
+				qa_tuple_list = [re.findall(qa_pattern,qa) for qa in qa_list]
+				# print(qa_tuple_list)
+
+				summary_updation = { "uid": story_uid,
+							 "summary": summary }
+				graph_conn.create_data(summary_updation)
+				for tup in qa_tuple_list:
+					q = tup[0][0]
+					a = tup[0][1]
+					print(q)
+					print(a)
+					print("\n")
+					question_node = {"uid":story_uid,
+									"studyQuestion":{
+										"question":q,
+										"answer":a
+									}}
+					graph_conn.create_data(question_node)
+
+
+def concept_finder(text):
+	text_words = re.findall(r'\w+',text)
+	text_words = [word.lower() for word in text_words]
+
+	# all one-word, two_word and three_word slices
+	possible_concepts = []
+	possible_concepts += [' '.join(text_words[i:i+3]) for i in range(len(text_words)-2)]
+	possible_concepts += [' '.join(text_words[i:i+2]) for i in range(len(text_words)-1)]
+	possible_concepts += text_words
+
+	# find the available conceptnet UIRs.
+	# if a multi-word concept is available, its component words should be exculded 
+	# unless it is present again, separately in the text 
+	possible_uris = [standardized_uri('en',phrase) for phrase in possible_concepts]
+	valid_concepts = []
+	for uri in possible_uris:
+			try:
+				vec = en_cnembeddings.loc[uri]
+				phrase = uri.replace('/c/en/','')
+				valid_concepts.append((phrase,vec))
+				# to remove component concepts
+				words = phrase.split("_")
+				phrase_components = []
+				phrase_components += ['_'.join(words[i+2]) for i in range(len(words)-1)]
+				phrase_components += words
+				for comp in phrase_components:
+					if '/c/en/'+comp in possible_uris:
+						possible_uris.remove('/c/en/'+comp)
+			except Exception as e:
+				# print("misshit at conceptnet:",uri)
+				pass
+	return valid_concepts
+
+def concept_adder():
+	graph_conn = dGraph_conn()
+	node_type = 'answer'
+	node_type_query = '''
+	query nodes($type:string){
+		nodes(func:has(answer)){
+			uid,
+			answer
+	}	}
+	'''
+	conceptNetNode_uid = None
+	conceptnetNode_query_res = graph_conn.query_data(dictNode_query,{'$dict_name':'Conceptnet Numberbatch'})
+	if len(conceptnetNode_query_res['dict']) == 0:
+		print("created conceptnet dictionary node:",conceptNetNode_uid)
+	elif len(conceptnetNode_query_res['dict']) > 1:
+		print("matched multiple conceptnet nodes")
+		return
+	else:
+		conceptNetNode_uid = conceptnetNode_query_res['dict'][0]['uid']
+		print('found Conceptnet node')
+
+
+	all_nodes_query_res = graph_conn.query_data(node_type_query,{"$type":node_type})
+	all_nodes= all_nodes_query_res['nodes']
+	for nod in all_nodes:
+		text = nod[node_type]
+		# print(text)
+		valid_concepts = concept_finder(text)
+		for con in valid_concepts:
+					# print("concept:",con[0])
+					termEmbed_uid = None
+					cnTerm_query_res = graph_conn.query_data(cnTerm_query,{'$term':con[0]})
+					if len(cnTerm_query_res['terms'])==0 :
+						termEmbed = {
+							'cn_term':con[0],
+							# 'embedding':term[1],
+							'belongsTo': {'uid':conceptNetNode_uid}}
+						termEmbed_uid = graph_conn.create_data(termEmbed)
+						print("added embedding for: ",con[0])
+					elif len(cnTerm_query_res['terms'])>1:
+						print('multiple term nodes matched for:',con[0])
+						return
+					else:
+						termEmbed_uid = cnTerm_query_res['terms'][0]['uid']
+					nodeEmbedslink = {
+						'uid': nod['uid'],
+						node_type+'Embeddings': {'uid':termEmbed_uid}
+					}
+					graph_conn.create_data(nodeEmbedslink)
+
 
 
 if __name__ == '__main__':
-	app.run(host='0.0.0.0', port=5000, debug=True)
+
+	# app.run(host='0.0.0.0', port=5000, debug=True)
+	
+	# addTransQuestions()
+	# addBibleStories()
+	concept_adder()

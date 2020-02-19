@@ -11,7 +11,13 @@ $(function() {
       function(data) {
         var res = data
           // $('div#search_result').text(res)
-        document.getElementById('search_result').innerHTML = res
+        document.getElementById('search_result').innerHTML = "Algo1<br>"+res
+       });
+    $.getJSON('dgraph/conceptsearch2/'+qry,
+      function(data) {
+        var res = data
+          // $('div#search_result').text(res)
+        document.getElementById('search_result2').innerHTML = "Algo2<br>"+res
        });
     return false;
   });
@@ -47,6 +53,10 @@ $(function() {
             <a href=# id=ask><img src="{{url_for('static', filename='search_icon.png')}}" style="width: :35px;height: 35px; vertical-align: middle;"></a>
             <br>
             <div id="search_result" style="background-color: #F7DC6F; text-align: left; width: 80%"></div>
+            <br>
+            <br>
+            <div id="search_result2" style="background-color: #F7DC6F; text-align: left; width: 80%"></div>
+
         </form>
 
 </div>

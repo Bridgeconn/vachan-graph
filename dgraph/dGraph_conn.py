@@ -37,6 +37,12 @@ class dGraph_conn:
 			<antonym>: [uid] @reverse .
 			<verseEmbeddings>: [uid] @reverse .
 			<cn_term>: string @index(exact) .
+			<collection>: string @index(exact) .
+			<question>: string @index(exact) .
+			<answer>: string @index(exact) .
+			<referenceVerse>: [uid] @reverse .
+			<language>: string @index(exact) .
+			<title>: string @index(exact) .
 
 		'''
 
