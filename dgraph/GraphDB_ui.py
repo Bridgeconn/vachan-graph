@@ -8,9 +8,15 @@ import itertools
 import pandas as pd
 import re, math
 from sklearn.neighbors import NearestNeighbors
+import nltk
+from nltk.stem import WordNetLemmatizer 
+from nltk.corpus import stopwords
+
 
 conceptnetNumberBatchModel = './models/mini.h5'
 rel_db_name = 'AutographaMT_Staging'
+lemmatizer = WordNetLemmatizer()
+stopWords = set(stopwords.words('english'))
 
 graph_conn = None
 app = Flask(__name__)
@@ -1874,13 +1880,24 @@ def concept_finder(text):
 	possible_concepts += [' '.join(text_words[i:i+3]) for i in range(len(text_words)-2)]
 	possible_concepts += [' '.join(text_words[i:i+2]) for i in range(len(text_words)-1)]
 	possible_concepts += text_words
+	for word in text_words:
+		lemma = lemmatizer.lemmatize(word)
+		if lemma not in possible_concepts and lemma not in stopWords:
+			possible_concepts.append(lemma)
+	for sw in list(stopWords)+["jesus"]:
+		if sw in possible_concepts:
+			possible_concepts.remove(sw)
+
 
 	# find the available conceptnet UIRs.
 	# if a multi-word concept is available, its component words should be exculded 
 	# unless it is present again, separately in the text 
 	possible_uris = [standardized_uri('en',phrase) for phrase in possible_concepts]
 	valid_concepts = []
+	added = []
 	for uri in possible_uris:
+			if uri in added:
+				continue
 			try:
 				vec = en_cnembeddings.loc[uri]
 				phrase = uri.replace('/c/en/','')
@@ -1892,7 +1909,7 @@ def concept_finder(text):
 				phrase_components += words
 				for comp in phrase_components:
 					if '/c/en/'+comp in possible_uris:
-						possible_uris.remove('/c/en/'+comp)
+						added.append('/c/en/'+comp)
 			except Exception as e:
 				# print("misshit at conceptnet:",uri)
 				pass
@@ -1900,14 +1917,15 @@ def concept_finder(text):
 
 def concept_adder():
 	graph_conn = dGraph_conn()
-	node_type = 'answer'
+	node_type = 'title'
 	node_type_query = '''
 	query nodes($type:string){
-		nodes(func:has(answer)){
+		nodes(func:has(title)){
 			uid,
-			answer
-	}	}
-	'''
+			title,
+	       '''+node_type+"Embeddings{ cn_term } } }"
+
+	
 	conceptNetNode_uid = None
 	conceptnetNode_query_res = graph_conn.query_data(dictNode_query,{'$dict_name':'Conceptnet Numberbatch'})
 	if len(conceptnetNode_query_res['dict']) == 0:
@@ -1923,12 +1941,26 @@ def concept_adder():
 	all_nodes_query_res = graph_conn.query_data(node_type_query,{"$type":node_type})
 	all_nodes= all_nodes_query_res['nodes']
 	for nod in all_nodes:
-		text = nod[node_type]
+		# if node_type+"Embeddings" in nod:
+		# 	print("Skipping")
+		# 	continue
+		# text = nod[node_type]
+		text = nod["verseText"]
+
 		# print(text)
 		valid_concepts = concept_finder(text)
 		for con in valid_concepts:
 					# print("concept:",con[0])
 					termEmbed_uid = None
+					if node_type+"Embeddings" in nod:
+						found_flag = False
+						for embd in nod[node_type+"Embeddings"]:
+							if embd['cn_term'] == con[0]:
+								# print("skipping concept")
+								found_flag = True
+								break
+						if found_flag:
+							continue
 					cnTerm_query_res = graph_conn.query_data(cnTerm_query,{'$term':con[0]})
 					if len(cnTerm_query_res['terms'])==0 :
 						termEmbed = {
@@ -1942,10 +1974,12 @@ def concept_adder():
 						return
 					else:
 						termEmbed_uid = cnTerm_query_res['terms'][0]['uid']
+
 					nodeEmbedslink = {
 						'uid': nod['uid'],
 						node_type+'Embeddings': {'uid':termEmbed_uid}
 					}
+					print("adding concept link for ",con[0] )
 					graph_conn.create_data(nodeEmbedslink)
 
 
