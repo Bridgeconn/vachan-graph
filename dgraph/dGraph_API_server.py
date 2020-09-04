@@ -1,226 +1,334 @@
 from flask import Flask, render_template, request
+from flask_restful import Api, Resourceimport pymysql
 from dGraph_conn import dGraph_conn
-import pymysql
-import csv, json
-import itertools
-import pandas as pd
-import re, math
+
 
 
 rel_db_name = 'AutographaMT_Staging'
 
 graph_conn = None
 app = Flask(__name__)
+api = Api(app)
+
+##### Graph #####
+
+class Graph(Resource):
+    def get(self):
+		# intialize a connection and add schema
+        pass
+
+    def delete(self):
+		# delete the entire graph
+        pass
+api.add_resource(UserAPI, '/graph', endpoint = 'user')
+
+#################
 
 
-@app.route('/')
-def main():
-	global graph_conn
-	graph_conn = dGraph_conn()
-	print(graph_conn)
-	return render_template('admin.html')
-
-### Graph ####
-
-'/graph' # get
-# intialize a connection and add schema
-# show the dash board
-
-'/graph' # delete
-# delete the entire graph
-# show the dash board
-
-###############
 
 ### strong numbers #########
+class Strongs(Resource):
+    def get(self):
+		# get the whole list of strongs nodes and their property values
+        pass
 
-'/strongs' # get
-# get the whole list of strongs nodes and their property values
+    def get(self, strongs_number):
+		# get the specified strong number's property values with all incoming and outgoing links
+		# the links would give its occurances in bible(links to bible-words)
+        pass
 
-'/strongs/<text:strongs_number>' #get
-# get the specified strong number's property values with all incoming and outgoing links
+    def get(self, strongs_number, bible_name):
+		# get the specified strong number's property values with all incoming and outgoing links
+		# the links would give its occurances in bible(links to bible-words)
+        pass
 
-'/strongs'	# post
-# creates a strongs dictionary node if not already present
-# add a list of strongs numbers and their property values to graph and link to strongs dictionary node
+    def get(self, strongs_number, bible_name, bbbcccvvv):
+    	# input: bbbcccvvv. bbb for 3 letter book code and ccc and vvv chapter and verse number. vvv and bbb are optional
+		# get the specified strong number's property values with all incoming and outgoing links
+		# the links would give its occurances in bible(links to bible-words)
+        pass
 
-'/strongs/<text:strongs_number>' # put
-# either update/add a property value or add a link to the selected strongs number node
+    def put(self, strongs_number):
+		# either update/add a property value or add a link to the selected strongs number node
+        pass
 
-'/strongs' #delete
-# deletes the dictionary node and also all strong number nodes
+     def post(self):
+		# creates a strongs dictionary node if not already present
+		# add a list of strongs numbers and their property values to graph and link to strongs dictionary node
+     	pass
 
-'/strongs/<text:strongs_number>' #delete
-# deletes the selected strongs node
+    def delete(self):
+		# deletes the dictionary node and also all strong number nodes
+        pass
 
-#############################
+    def  delete(self, strongs_number):
+		# deletes the selected strongs node
+    	pass
+
+api.add_resource(Strongs, '/strongs', endpoint = 'strongs')
+api.add_resource(Strongs, '/strongs/<text:strongs_number>', endpoint = 'strongs')
+api.add_resource(Strongs, '/strongs/<text:strongs_number>/<text:bible_name>', endpoint = 'strongs')
+api.add_resource(Strongs, '/strongs/<text:strongs_number>/<text:bible_name>/<text:bbbcccvvv>', endpoint = 'strongs')
+
+##############################
+
 
 ### translation words #########
 
-'/translation-word' # get
-# get the whole list of translation-word nodes and their property values
+class TranslationWord(Resource):
+    def get(self):
+		# get the whole list of translation-word nodes and their property values
+        pass
 
-'/translation-word/<text:translation_word>' #get
-# get the specified tw's property values with all incoming and outgoing links
+    def get(self, translation_word):
+		# get the specified tw's property values with all incoming and outgoing links
+    	pass
 
-'/translation-word'	# post
-# creates a translation-word dictionary node if not already present
-# add a list of translation-words  and their property values to graph and link to translation-word dictionary node
+    def get(self, translation_word, bible_name):
+		# get the specified tw's property values with all incoming and outgoing links
+    	pass
 
-'/translation-word/<text:translation_word>' # put
-# either update/add a property value or add a link to the selected translation-word number node
+    def get(self, translation_word, bible_name, bbbcccvvv):
+    	# input: bbbcccvvv. bbb for 3 letter book code and ccc and vvv chapter and verse number. vvv and bbb are optional
+		# get the specified tw's property values with all incoming and outgoing links
+    	pass
 
-'/translation-word' #delete
-# deletes the dictionary node and also all strong number nodes
+    def put(self, translation_word):
+		# either update/add a property value or add a link to the selected translation-word number node
+        pass
 
-'/translation-word/<text:translation_word>' #delete
-# deletes the selected node
+    def post(self):
+		# creates a translation-word dictionary node if not already present
+		# add a list of translation-words  and their property values to graph and link to translation-word dictionary node
+    	pass
+
+    def delete(self):
+		# deletes the dictionary node and also all strong number nodes
+        pass
+
+    def delete(self, translation_word):
+		# deletes the selected node
+        pass
+
+api.add_resource(TranslationWord, '/translationword', endpoint = 'translationword')
+api.add_resource(TranslationWord, '/translationword/<text:translation_word>', endpoint = 'translationword')
+api.add_resource(TranslationWord, '/translationword/<text:translation_word>/<text:bible_name>', endpoint = 'translationword')
+api.add_resource(TranslationWord, '/translationword/<text:translation_word>/<text:bible_name>/<text:bbbcccvvv>', endpoint = 'translationword')
 
 #############################
 
 
 ### bible names #########
+class BibleName(Resource):
+    def get(self):
+		# get the whole list of bible-name nodes and their property values
+        pass
+
+    def get(self, name):
+		# get the specified name's property values with all incoming and outgoing links
+    	pass
+
+    def get(self, name, bible_name):
+		# get the specified name's property values with all incoming and outgoing links
+    	pass
+
+    def get(self, name, bible_name, bbbcccvvv):
+    	# input: bbbcccvvv. bbb for 3 letter book code and ccc and vvv chapter and verse number. vvv and bbb are optional
+		# get the specified name's property values with all incoming and outgoing links
+    	pass
 
 
-'/bible-name' # get
-# get the whole list of bible-name nodes and their property values
+    def put(self, name):
+		# either update/add a property value or add a link to the selected bible-name number node
+        pass
 
-'/bible-name/<text:bible_name>' #get
-# get the specified name's property values with all incoming and outgoing links
+    def post(self):
+		# creates a bible-name dictionary node if not already present
+		# add a list of bible-names  and their property values to graph and link to bible-name dictionary node
+    	pass
 
-'/bible-name'	# post
-# creates a bible-name dictionary node if not already present
-# add a list of bible-names  and their property values to graph and link to bible-name dictionary node
+    def delete(self):
+		# deletes the dictionary node and also all strong number nodes
+	    pass
 
+	def delete(self, name):
+		# deletes the selected node
+		pass		
 
-'/bible-name/<text:bible_name>' # put
-# either update/add a property value or add a link to the selected bible-name number node
-
-'/bible-name' #delete
-# deletes the dictionary node and also all strong number nodes
-
-'/bible-name/<text:translation_word>' #delete
-# deletes the selected node
+api.add_resource(BibleName, '/biblename', endpoint = 'biblename')
+api.add_resource(BibleName, '/biblename/<text:name>', endpoint = 'biblename')
+api.add_resource(BibleName, '/biblename/<text:name>/<text:bible_name>', endpoint = 'biblename')
+api.add_resource(BibleName, '/biblename/<text:name>/<text:bible_name>/<text:bbbcccvvv>', endpoint = 'biblename')
 
 #############################
 
 
 
 ##### Bible #######
+class Bible(Resource):
+    def get(self):
+    	# fetches all the bible nodes and their property values
+        pass
 
-'/bible' # get
-# fetches all the bible nodes and their property values
+    def get(self, bible_name):
+		# bible_name would be a unique identifier with version name, version number(if present) and language code
+		# fetches the property values of the seleted bible and all incoming and outgoing links    	
+		pass
 
-'/bible/<text: bible_name>' #get
-# bible_name would be a unique identifier with version name, version number(if present) and language code
-# fetches the property values of the seleted bible and all incoming and outgoing links
+    def put(self, bible_name):
+    	# update/add a property value or add a link to the specified bible node
+        pass
 
-'/bible' # post
-# creates a list of bible nodes with specified properties
-# { 'bible name': "mal_IRV4_bible/eng_ESV_bible/grk_UGNT_bible",
-#    'language': "mal" }
+    def post(self):
+		# creates a list of bible nodes with specified properties
+		# { 'bible name': "mal_IRV4_bible/eng_ESV_bible/grk_UGNT_bible",
+		#    'language': "mal" }
+    	pass
 
+    def delete(self, bible_name):
+    	# delete the selected bible node and all connections to/from it, also deleting its contents books, chapters, verses and words
+        pass
 
-'/bible/<text: bible_name>' #put
-# update/add a property value or add a link to the specified bible node
-
-'/bible/<text:bible_name>' # delete
-# delete the selected bible node and all connections to/from it, also deleting its contents books, chapters, verses and words
+api.add_resource(Bible, '/bible', endpoint = 'bible')
+api.add_resource(Bible, '/users/<text:bible_name>', endpoint = 'bible')
 
 #####################
 
 
 ######## bible-book #######
+class BibleBook(Resource):
+    def get(self, bible_name):
+		# fetches all available books in selected bible
+        pass
 
-'/bible-book/<text:bible>' # get
-# fetches all available books in selected bible
+    def get(self, bible_name, book_code):
+    	# fetches all properties and connections(available chapters) of selected book 
+    	pass
 
-'/bible-book/<text:bible>/<text:book_code>' # get
-# fetches all properties and connections(available chapters) of selected book 
+    def put(self, bible_name, book_code):
+		# add/change property values and also add new links 
+        pass
 
-'/bible-book/<text:bible>' #post
-# Create a list of book nodes under the selected bible node
+    def post(self, bible_name):
+		# Create a list of book nodes under the selected bible node
+		pass    	
 
-'/bible-book/<text:bible>/<text:book_code>' #put
-# add/change property values and also add new links 
+    def delete(self, bible_name, book_code):
+		# delete the selected book node and all connections to/from it, also deleting its contents chapters, verses and words
+        pass
 
-'/bible-book/<text:bible>/<text:book_code>' # delete
-# delete the selected book node and all connections to/from it, also deleting its contents chapters, verses and words
+api.add_resource(BibleBook, '/bible/book/<text:bible_name>', endpoint = 'bible/book')
+api.add_resource(BibleBook, '/bible/book/<text:bible_name>/<text:book_code>', endpoint = 'bible/book')
 
 ############################
 
 
 ######## bible-book-chapter #######
+class BibleBookChapter(Resource):
+    def get(self, bible_name, book_code):
+		# fetches all available chapters in selected bible book
+        pass
 
-'/bible-book-chapter/<text:bible>/<text:book_code>' # get
-# fetches all available chapters in selected bible book
+    def get(self, bible_name, book_code, chapter_number):
+		# fetches all properties and connections(available verses) of selected chapter 
+        pass
 
-'/bible-book-chapter/<text:bible>/<text:book_code>/<int:chapter_number>' # get
-# fetches all properties and connections(available verses) of selected chapter 
+    def put(self, bible_name, book_code, chapter_number):
+		# add/change property values and also add new links 
+        pass
 
-'/bible-book-chapter/<text:bible>/<text:book_code>' #post
-# Create a list of chapter nodes under the selected book node
+    def post(self, bible_name, book_code):
+    	# Create a list of chapter nodes under the selected book node
+    	pass
 
-'/bible-book-chapter/<text:bible>/<text:book_code>/<text:chapter_number>' #put
-# add/change property values and also add new links 
+    def delete(self, bible_name, book_code, chapter_number):
+		# delete the selected chapter node and all connections to/from it, also deleting its contents verses and words
+		pass
 
-'/bible-book-chapter/<text:bible>/<text:book_code>/<text:chapter>' # delete
-# delete the selected chapter node and all connections to/from it, also deleting its contents verses and words
+api.add_resource(BibleBookChapter, '/bible/book/chapter/<text:bible_name>/<text:book_code>', endpoint = 'bible/book/chapter')
+api.add_resource(BibleBookChapter, '/bible/book/chapter/<text:bible_name>/<text:book_code>/<int:chapter_number>', endpoint = 'bible/book/chapter')
 
 ############################
 
 ######## bible-book-chapter-verse #######
+class BibleBookChapterVerse(Resource):
+    def get(self, bible_name, book_code, chapter_number):
+		# fetches all available verses in selected chapter
+        pass
 
-'/bible-book-chapter-verse/<text:bible>/<text:book_code>/<int:chapter_number>' # get
-# fetches all available verses in selected chapter
+    def get(self, bible_name, book_code, chapter_number, verse_number):
+		# fetches all properties and connections(available words) of selected verse 
+        pass
 
-'/bible-book-chapter-verse/<text:bible>/<text:book_code>/<int:chapter_number>/<text:verse_number>' # get
-# fetches all properties and connections(available words) of selected verse 
+    def put(self, bible_name, book_code, chapter_number, verse_number):
+		# add/change property values and also add new links 
+        pass
 
-'/bible-book-chapter-verse/<text:bible>/<text:book_code>/<int:chapter_number>' #post
-# Create a list of verse nodes under the selected chapter node. Also create the word nodes under each of these verses
+    def post(self, bible_name, book_code, chapter_number):
+		# Create a list of verse nodes under the selected chapter node. 
+		# Also create the word nodes under each of these verses
+    	pass
 
-'/bible-book-chapter-verse/<text:bible>/<text:book_code>/<int:chapter_number>/<text:verse_number>' #put
-# add/change property values and also add new links 
+    def delete(self, bible_name, book_code, chapter_number, verse_number):
+		# delete the selected chapter node and all connections to/from it, also deleting its  word nodes
+        pass
 
-'/bible-book-chapter-verse/<text:bible>/<text:book_code>/<int:chapter_number>/<text:verse_number>' # delete
-# delete the selected chapter node and all connections to/from it, also deleting its  word nodes
+api.add_resource(BibleBookChapterVerse, '/bible/book/chapter/verse/<text:bible_name>/<text:book_code>/<int:chapter_number>', endpoint = 'bible/book/chapter/verse')
+api.add_resource(BibleBookChapterVerse, '/bible/book/chapter/verse/<text:bible_name>/<text:book_code>/<int:chapter_number>/<text:verse_number>', endpoint = 'bible/book/chapter/verse')
 
 #########################################
 
 
 ######## bible-word #######
+class BibleWord(Resource):
+    def get(self, bible_name, word):
+		# fetches all available occurances of the specified word in that language's bible
+		# returns [ { word:"", bible:"", book: "", chapter: "", verse :""}, {}, ... ]
+        pass
 
-'/bible-word/<text:language>/<text:word>' # get
-# fetches all available occurances of the specified word in that language's bible
-# returns [ { word:"", bible:"", book: "", chapter: "", verse :""}, {}, ... ]
+    def get(self, bible_name, bbbcccvvv, word):
+    	# fetches all properties and connections(available links to dictionaries etc) of all occurances of the word in the selected verse
+		# returns [ {"word":"", position:"", property1:"", ... }, {}, ... ]
+        pass
 
-'/bible-word/<text:bible>/<text:book_code>/<int:chapter_number>/<text:verse_number>/<text:word>' # get
-# fetches all properties and connections(available links to dictionaries etc) of all occurances of the word in the selected verse
-# returns [ {"word":"", position:"", property1:"", ... }, {}, ... ]
+    def get(self, bible_name, bbbcccvvv, position):
+    	# not sure if this would work as themethod above has a similar parameter list
+        pass
 
-'/bible-word/<text:bible>/<text:book_code>/<int:chapter_number>/<text:verse_number>/<int:position>' #put
-# add/change property values and also add new links 
+    def put(self, bible_name, bbbcccvvv, position):
+		# add/change property values and also add new links 
+        pass
+
+
+api.add_resource(BibleWord, '/bible/word/<text:bible_name>/<text:word>', endpoint = 'bible/word')
+api.add_resource(BibleWord, '/bible/word/<text:bible_name>/<text:bbbcccvvv>/<text:word>', endpoint = 'bible/word')
+api.add_resource(BibleWord, '/bible/word/<text:bible_name>/<text:bbbcccvvv>/<int:position>', endpoint = 'bible/word')
 
 #########################################
 
 
 ##### alignment ######
+class Alignment(Resource):
+    def get(self, bible_name1, bible_name2, bbbcccvvv):
+		# input: in bbbcccvvv , bbb if 3 letter book_code, ccc is chapter number and vvv is verse number
+		# biblenames could be any bible present in DB, they are not restricted to greek
+		# if none of them is greek then alignment is derived via the alignmnents to greek
+		# Alignmnet across verses not handled now as the data also doesnt have it yet
+		# returns the word alignmnets for the selected verse pairs. 
+        pass
 
-'/alignment/<Text:bible_name1>/<text:bible_name2>/<text:bbbcccvvv>' #get
-# input: in bbbcccvvv , bbb if 3 letter book_code, ccc is chapter number and vvv is verse number
-# biblenames could be any bible present in DB, they are not restricted to greek
-# if none of them is greek then alignment is derived via the alignmnents to greek
-# Alignmnet across verses not handled now as the data also doesnt have it yet
-# returns the word alignmnets for the selected verse pairs. 
+    def post(self, bible_name1, bible_name2):
+		# using a list of alignments exported from mysql DB, add links bettween bible-word nodes of each bible
+		# Alignmnet across verses not handled now as the data also doesnt have it yet
+		# As we only have alignmnets to greek bible, bible_name2 is restricted to the greek bible in graph DB
+        pass
 
-'/alignment/<Text:bible_name1>/<text:bible_name2>' #post
-# using a list of alignments exported from mysql DB, add links bettween bible-word nodes of each bible
-# Alignmnet across verses not handled now as the data also doesnt have it yet
-# As we only have alignmnets to greek bible, bible_name2 is restricted to the greek bible in graph DB
+    def delete(self, bible_name1, bible_name2):
+		# delete all alignment links bettween bible-word nodes of the selected bibles
+        pass
 
-'/alignment/<Text:bible_name1>/<text:bible_name2>' #delete
-# delete all alignment links bettween bible-word nodes of the selected bibles
+api.add_resource(Alignment, '/alignment/<Text:bible_name1>/<text:bible_name2>/<text:bbbcccvvv>', endpoint = 'alignment')
+api.add_resource(Alignment, '/alignment/<Text:bible_name1>/<text:bible_name2>', endpoint = 'alignment')
 
 #####################################
 
