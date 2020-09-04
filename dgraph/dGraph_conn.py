@@ -53,8 +53,10 @@ class dGraph_conn:
 	# Create a client stub.
 	def create_client_stub(self):
 		# self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
-		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080')
-		self.client_stub = pydgraph.DgraphClientStub('139.59.90.184:9080')
+		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080') # prod server
+		# self.client_stub = pydgraph.DgraphClientStub('139.59.90.184:9080') # prod server
+		self.client_stub = pydgraph.DgraphClientStub('128.199.18.6:9080') # new staging server
+		
 
 
 	# Create a client.
@@ -118,27 +120,9 @@ class dGraph_conn:
 			# Run mutation.
 			assigned = txn.mutate(set_obj=p)
 			
-			# mu = pydgraph.Mutation(set_json=json.dumps(p).encode('utf8'))
-			# print("half way through")
-			# assigned = txn.mutate(mu)
-
-			# mutation = txn.create_mutation(set_nquads='_:alice <name> "Alice" .')
-			# request = txn.create_request(mutations=[mutation], commit_now=True)
-			# assigned = txn.do_request(request)
-
-
 			# Commit transaction.
 			txn.commit()
 
-			# Get uid of the outermost object (person named "Alice").
-			# assigned.uids returns a map from blank node names to uids.
-			# For a json mutation, blank node names "blank-0", "blank-1", ... are used
-			# for all the created nodes.
-			# print('Created outer most node with uid = {}\n'.format(assigned.uids['blank-0']))
-
-			# print('All created nodes (map from blank node names to uids):')
-			# for uid in assigned.uids:
-				# print('created {} => {}'.format(uid, assigned.uids[uid]))
 		except Exception as e:
 			# raise e
 			print('*'*10)
@@ -148,8 +132,8 @@ class dGraph_conn:
 			# Clean up. Calling this after txn.commit() is a no-op
 			# and hence safe.
 			txn.discard()
-			# print('\n')
-		# print("assigned:",assigned)
+
+		# get the uid of the created nodes
 		assigned = list(dict((assigned.uids)).values())
 
 		if assigned:
@@ -157,8 +141,6 @@ class dGraph_conn:
 		else:
 			return_res = None
 		return return_res
-		# print(return_res)
-		# return None
 
 
 	#Deleting a data
@@ -223,5 +205,6 @@ class dGraph_conn:
 
 if __name__ == '__main__':
 	conn = dGraph_conn()
-	conn.delete_data(["0x3459","0x345a","0x345b","0x345c","0x345d","0x345e","0x345f"])
+	print("connection ok")
+	# conn.delete_data(["0x3459","0x345a","0x345b","0x345c","0x345d","0x345e","0x345f"])
 
