@@ -1,6 +1,6 @@
 import pydgraph
 import datetime
-import json
+import json, logging
 
 
 class dGraph_conn:
@@ -47,15 +47,15 @@ class dGraph_conn:
 		'''
 
 		self.set_schema(schema)
-		print("set set_schema")
+		logging.info("set set_schema")
 	
 
 	# Create a client stub.
 	def create_client_stub(self):
-		# self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
+		self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
 		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080') # prod server
 		# self.client_stub = pydgraph.DgraphClientStub('139.59.90.184:9080') # prod server
-		self.client_stub = pydgraph.DgraphClientStub('128.199.18.6:9080') # new staging server
+		# self.client_stub = pydgraph.DgraphClientStub('128.199.18.6:9080') # new staging server
 		
 
 
@@ -125,9 +125,9 @@ class dGraph_conn:
 
 		except Exception as e:
 			# raise e
-			print('*'*10)
-			print(e)
-			print('*'*10)
+			logging.info('*'*10)
+			logging.info(e)
+			logging.info('*'*10)
 		finally:
 			# Clean up. Calling this after txn.commit() is a no-op
 			# and hence safe.
@@ -155,14 +155,14 @@ class dGraph_conn:
 						   uid
 						}
 					}"""
-					print("uid:",uid['uid'])
+					logging.info("uid:",uid['uid'])
 					variables1 = {'$a': uid['uid']}
 					res1 = self.client.txn(read_only=True).query(query1, variables=variables1)
 					nodes = json.loads(res1.json)
 					for node in nodes['all']:
-						print("deleting UID: " + node['uid'])
+						logging.info("deleting UID: " + node['uid'])
 						txn.mutate(del_obj=node)
-						print('deleted')
+						logging.info('deleted')
 			txn.commit()
 		finally:
 			txn.discard()
@@ -192,12 +192,12 @@ class dGraph_conn:
 			}"""
 
 			variables = {'$a': 'Alice'}
-		# print('variables:',variables)
+		# logging.info('variables:',variables)
 		try:
 			res = self.client.txn(read_only=True).query(query, variables=variables)
 		except Exception as e:
-			print('**************Error***********')
-			print('variables:',variables)
+			logging.info('**************Error***********')
+			logging.info('variables:',variables)
 			raise e
 		return json.loads(res.json)
 
@@ -205,6 +205,6 @@ class dGraph_conn:
 
 if __name__ == '__main__':
 	conn = dGraph_conn()
-	print("connection ok")
+	logging.info("connection ok")
 	# conn.delete_data(["0x3459","0x345a","0x345b","0x345c","0x345d","0x345e","0x345f"])
 
