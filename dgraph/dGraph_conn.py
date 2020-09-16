@@ -22,9 +22,9 @@ class dGraph_conn:
 			<StrongsNumber>: int @index(int) .
 			<position>: int @index(int) .
 			<alignsTo>: [uid] @reverse .
-			<lemma>: [uid] @reverse .
+			<strongsLink>: [uid] @reverse .
 			<twType>: string @index(exact) .
-			<tw>: uid @reverse .
+			<twLink>: uid @reverse .
 			<word>: string @index(exact) .
 			<synonym_set>: string @index(exact) .
 			<wn_lemma>: string @index(exact) .
