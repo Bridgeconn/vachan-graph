@@ -201,7 +201,21 @@ class dGraph_conn:
 			raise e
 		return json.loads(res.json)
 
-
+	def upsert(self, query=None, nquad=None, variables=None):
+		if not query :
+			query = """{
+				  u as var(func: eq(name, "Alice"))
+				}"""
+		if not nquad:
+			nquad = """
+				  uid(u) <name> "Alice" .
+				  uid(u) <age> "25" .
+				"""
+		txn = self.client.txn()
+		mutation = txn.create_mutation(set_nquads=nquad)
+		request = txn.create_request(query=query, mutations=[mutation], commit_now=True)
+		txn.do_request(request) 
+		return
 
 if __name__ == '__main__':
 	conn = dGraph_conn()
