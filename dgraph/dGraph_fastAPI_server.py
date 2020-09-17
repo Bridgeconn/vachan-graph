@@ -12,8 +12,18 @@ graph_conn = None
 rel_db_name = 'AutographaMT_Staging'
 logging.basicConfig(filename='example.log',level=logging.DEBUG)
 
-book_num_map = {'mat': 40, "matthew": 40}
+book_num_map = { 'mat':40, 'mrk' : 41, 'luk': 42, 'jhn': 43}
 
+class BibleBook(str, Enum):
+	mat = 'mat'
+	mrk = 'mrk'
+	luk = 'luk'
+	jhn = 'jhn'
+
+class Reference(BaseModel):
+	book : BibleBook
+	chapter: int
+	verse: int
 
 @app.get("/", status_code=200)
 def test():
@@ -80,7 +90,7 @@ strongs_link_query = '''
 			definition,
 			strongsNumberExtended,
 			englishWord,
-			occurance:~lemma @normalize{
+			occurance:~strongsLink @normalize{
 				position:position,
 				word:word,
 				belongsTo{
@@ -103,7 +113,7 @@ strongs_in_verse_query = '''
 					~belongsTo{
 						position: position,
 						word:word,
-						lemma {
+						strongsLink {
 							StrongsNumber:StrongsNumber,
 							pronunciation:pronunciation,
 							lexeme:lexeme,
@@ -274,7 +284,7 @@ tw_link_query = '''
 		slNo,
 		twType,
 		description,
-		occurances: ~tw @normalize {
+		occurances: ~twLink @normalize {
 	        position:position,
 	        word:word,
 			belongsTo{
@@ -297,7 +307,7 @@ tw_in_verse_query = '''
 					~belongsTo{
 						position: position,
 						word:word,
-						tw {
+						twLink {
 							translationWord:translationWord,
 							slNo:slNo,
 							twType:twType,
@@ -427,3 +437,574 @@ def add_translationwords():
 				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 			logging.info('tw_node_uid:%s' %tw_node_uid)
 	return {'msg': 'Added to graph'}
+
+
+
+########################### Bible Names ###########################
+
+
+
+
+
+
+
+
+
+
+
+
+
+##################### Bible ##########################
+
+all_bibles_query = '''
+	query bibles($dummy: string){
+	bibles(func: has(bible)){
+		bible,
+		language,
+		books : ~belongsTo {
+			book,
+			bookNumber,
+			totalChapters: count(~belongsTo)
+		}
+	}
+	}
+
+'''
+
+bible_name_query = '''
+	query bibles($bib: string){
+	bibles(func: eq(bible, $bib)){
+		bible,
+		language,
+		books : ~belongsTo {
+			book,
+			bookNumber,
+			totalChapters: count(~belongsTo)
+		}
+	}
+	}
+
+'''
+
+bible_lang_query = '''
+	query bibles($lang: string){
+	bibles(func: has(bible)) @filter(eq(language, $lang)){
+		bible,
+		language,
+		version,
+		books : ~belongsTo {
+			book,
+			bookNumber,
+			totalChapters: count(~belongsTo)
+		}
+	}
+	}
+
+'''
+
+bible_node_query  = """
+				query bible($bib: string){
+				  u as var(func: eq(bible, $bib))
+				}"""
+
+bible_uid_query = '''
+	query bible($bib: string){
+	bible(func: eq(bible, $bib)){
+		uid
+	}
+	}
+'''
+
+bookNode_query = '''
+		query book($bib: string, $book: string){
+		book(func: uid($bib))
+		@normalize {
+				~belongsTo @filter (eq(book,$book)){
+				uid : uid
+				}
+		}
+		}
+	'''
+chapNode_query = '''
+		query book($chap: int, $book: string){
+		chapter(func: uid($book))
+		@normalize {
+				~belongsTo @filter (eq(chapter,$chap)){
+				uid : uid
+				}
+		}
+		}
+	'''
+verseNode_query = '''
+		query book($chapter: string, $verse: int){
+		verse(func: uid($chapter))
+		@normalize {
+				~belongsTo @filter (eq(verse,$verse)){
+				uid : uid
+				}
+		}
+		}
+	'''
+strongNode_query = '''
+	query strongs($strongnum: int){
+	strongs(func: eq(StrongsNumber,$strongnum)){
+		uid
+	}
+	}
+'''
+twNode_query = '''
+	query tw($word: string){
+	tw(func: eq(translationWord, $word) ){
+		uid
+	}
+	}
+	'''
+
+class BibleProperty(str, Enum):
+	language= 'language'
+	version= 'version'
+
+class BiblePropertyValue(BaseModel):
+	property: BibleProperty
+	value: str
+
+@app.get('/bibles', status_code=200)
+def get_bibles(bible_name : Optional[str] = None, language: Optional[str] = None, skip: Optional[int] = None, limit: Optional[int] = None):
+	''' fetches bibles nodes, properties and available books. 
+	If no query params are given, all bibles in graph are fetched.
+	If bible_name is specified, only that node is returned.
+	If only language if given, all bible nodes, and details vavailable in that language is returned
+	Number of items returned can be set using the skip and limit parameters.
+	'''
+	result = {}
+	try:
+		if not bible_name and not language:
+			query_res = graph_conn.query_data(all_bibles_query,{'$dummy':''})
+		elif bible_name:
+			query_res = graph_conn.query_data(bible_name_query,{'$bib':bible_name})
+			logging.info('query_res: %s' % query_res)
+		else:
+			query_res = graph_conn.query_data(bible_lang_query,{'$lang':language})
+			logging.info('query_res: %s' % query_res)
+	except Exception as e:
+		logging.error('At fetching Bibles')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	logging.info('skip: %s, limit %s' % (skip, limit))
+	if not skip:
+		skip = -1
+	if not limit:
+		limit = len(query_res['bibles'])
+	result['bibles'] = query_res['bibles'][skip+1:limit]
+	return result
+
+@app.put('/bibles/{bible_name}', status_code=200)
+def edit_bible(bible_name: str, key_values: List[BiblePropertyValue]):
+	''' Update a property value of selected bible node'''
+	logging.info("input args bible_name: %s, key_values: %s" % (bible_name, key_values))
+	nquad = ''
+	for prop in key_values:
+		nquad +=	'uid(u) <%s> "%s" .\n' %(prop.property.value, prop.value)
+	logging.info('nquad: %s' %nquad)
+	try:
+		graph_conn.upsert(query=bible_node_query, nquad=nquad, variables={'$bib': bible_name})
+	except Exception as e:
+		logging.error('At editing Bible ')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	raise HTTPException(status_code=503, detail="Not implemented properly. ")
+
+
+@app.post('/bibles', status_code = 200)
+def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("Hindi"), version: str = Body('IRV4'), tablename: str = Body('Hin_IRV4_BibleWord'), bookcode: BibleBook = Body('mat')):
+	''' create a bible node, fetches contents from specified table in MySQL DB and adds to Graph.
+	Currently the API is implemented to add only one book at a time. 
+	This is due to the amount of time required.'''
+	try:
+		bibNode_query_res = graph_conn.query_data(bible_uid_query,{'$bib':bible_name})
+	except Exception as e:
+		logging.error('At fetching Bible uid')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+
+	if len(bibNode_query_res['bible']) == 0:
+		# create a bible nodename
+		bib_node = { 'bible': bible_name,
+			'language' : language,
+			'version': str(version)
+				}
+		try:
+			bib_node_uid = graph_conn.create_data(bib_node)
+			logging.info('bib_node_uid: %s' %bib_node_uid)
+		except Exception as e:
+			logging.error('At creating Bible node')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	elif len(bibNode_query_res['bible']) > 1:
+		logging.error('At fetching Bible uid')
+		logging.error( 'matched multiple bible nodes')
+		raise HTTPException(status_code=500, detail="Graph side error. "+' matched multiple bible nodes')
+	else:
+		bib_node_uid = bibNode_query_res['bible'][0]['uid']
+
+	try:
+		db = pymysql.connect(host="localhost",database=rel_db_name, user="root", password="password", charset='utf8mb4')
+		cursor = db.cursor(pymysql.cursors.SSCursor)
+	except Exception as e:
+		logging.error('At connecting to MYSQL')
+		logging.error( e)
+		raise HTTPException(status_code=502, detail="MySQL side error. "+str(e))
+	try:
+		if bible_name == 'Grk UGNT4 bible':
+			Morph_sequence = ['Role','Type','Mood','Tense','Voice','Person','Case','Gender','Number','Degree']
+			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, Strongs, Morph, Pronunciation, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(book_num_map[bookcode.value]))
+		else:
+			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(book_num_map[bookcode.value]))
+	except Exception as e:
+		logging.error('At fetching data from MYSQL')
+		logging.error( e)
+		raise HTTPException(status_code=502, detail="MySQL side error. "+str(e))
+	count_for_test = 0
+	chapNode=None
+	while(True):
+		next_row = cursor.fetchone()
+		if not next_row:
+			break
+		# if count_for_test>100:
+		# 	break
+		count_for_test += 1
+
+
+		LID = next_row[0]
+		Position = next_row[1]
+		Word = next_row[2]
+		BookNum = next_row[3]
+		Chapter = next_row[4]
+		Verse = next_row[5]
+		BookName = next_row[6]
+		if bible_name == "Grk UGNT4 bible":			
+			Strongs = next_row[7]
+			Morph = next_row[8].split(',')
+			Pronunciation = next_row[9]	
+			TW_fullString = next_row[10]
+		logging.info('Book,Chapter,Verse:'+str(BookNum)+","+str(Chapter)+","+str(Verse))
+
+		# to find/create book node
+		variables = {
+			'$bib': bib_node_uid,
+			'$book': BookName
+		}
+		try:
+			bookNode_query_res = graph_conn.query_data(bookNode_query,variables)
+		except Exception as e:
+			logging.error('At fetching book node')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		if len(bookNode_query_res['book']) == 0:
+			bookNode = {
+				'book' : BookName,
+				'bookNumber': BookNum,
+				'belongsTo' : {
+					'uid': bib_node_uid 
+				}
+			}
+			try:
+				bookNode_uid = graph_conn.create_data(bookNode)
+			except Exception as e:
+				logging.error('At creating book node')
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		elif len(bookNode_query_res['book']) > 1:
+			logging.error('At fetching book node')
+			logging.error("Matched multiple book nodes")
+			raise HTTPException(status_code=500, detail="Graph side error. Matched multiple book nodes")
+		else:
+			bookNode_uid = bookNode_query_res['book'][0]['uid']
+
+		# to find/create chapter node
+		variables = {
+			'$book': bookNode_uid,
+			'$chap': str(Chapter)
+		}
+		try:
+			chapNode_query_res = graph_conn.query_data(chapNode_query,variables)
+		except Exception as e:
+			logging.error('At fetching chapter node')
+			logging.error(e)
+			raise HTTPException(status_code=500, detail="Graph side error. "+ str(e))
+
+		if len(chapNode_query_res['chapter']) == 0:
+			chapNode = {
+				'chapter' : Chapter,
+				'belongsTo' : {
+					'uid': bookNode_uid 
+				}
+			}
+			try:
+				chapNode_uid = graph_conn.create_data(chapNode)
+			except Exception as e:
+				logging.error('At creating chapter node')
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		elif len(chapNode_query_res['chapter']) > 1:
+			logging.error('At fetching chapter node')
+			logging.error("Matched multiple chapter nodes")
+			raise HTTPException(status_code=500, detail="Graph side error. Matched multiple chapter nodes")
+		else:
+			chapNode_uid = chapNode_query_res['chapter'][0]['uid']
+
+		# to find/create verse node
+		variables = {
+			'$chapter': chapNode_uid,
+			'$verse': str(Verse)
+		}
+		try:
+			verseNode_query_res = graph_conn.query_data(verseNode_query,variables)
+		except Exception as e:
+			logging.error('At fetching verse node')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		if len(verseNode_query_res['verse']) == 0:
+			verseNode = {
+				'verse' : Verse,
+				'belongsTo' : {
+					'uid': chapNode_uid 
+				},
+				'lid':LID
+			}
+			try:
+				verseNode_uid = graph_conn.create_data(verseNode)
+			except Exception as e:
+				logging.error('At creating verse node')
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		elif len(verseNode_query_res['verse']) > 1:
+				logging.error('At creating chapter node')
+				logging.error("Matched multiple verse nodes")
+				raise HTTPException(status_code=500, detail="Graph side error. Matched multiple verse nodes")
+		else:
+			verseNode_uid = verseNode_query_res['verse'][0]['uid']
+
+		# to create a word node
+		wordNode = {
+				'word' : Word,
+				'belongsTo' : {
+					'uid': verseNode_uid 
+				},
+				'position': Position,
+			}
+		if bible_name == 'Grk UGNT4 bible':
+			wordNode['pronunciation'] = Pronunciation
+
+			for key,value in zip(Morph_sequence,Morph):
+				if(value!=''):
+					wordNode[key] = value
+			variables = {
+				'$strongnum': str(Strongs)
+			}
+			try:
+				strongNode_query_res = graph_conn.query_data(strongNode_query,variables)
+			except Exception as e:
+				logging.error('At fetching strong node')
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+			logging.info('strongNode_query_res:',strongNode_query_res)
+			if len(strongNode_query_res['strongs'])>0:
+				strongNode_uid = strongNode_query_res['strongs'][0]['uid']
+				wordNode['strongsLink'] = { 'uid': strongNode_uid }
+			if TW_fullString != "-":
+				Type, word = TW_fullString.split('/')[-2:]
+				variables = {
+					'$word' : word
+				}
+				try:
+					twNode_query_res = graph_conn.query_data(twNode_query,variables)
+				except Exception as e:
+					logging.error('At fetching tw node')
+					logging.error(e)
+					raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+				if len(twNode_query_res['tw']) > 0:
+					twNode_uid = twNode_query_res['tw'][0]['uid']
+					wordNode['twLink'] = { 'uid': twNode_uid }
+		try:
+			wordNode_uid = graph_conn.create_data(wordNode)
+		except Exception as e:
+			logging.error('At creating word node')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		logging.info('wordNode_uid:%s'%wordNode_uid)
+
+	cursor.close()
+	db.close()
+	add_verseTextToBible(bib_node_uid, tablename.replace('BibleWord','Text'), bookcode.value)	
+	return {'msg': "Added %s in %s" %(bookcode, bible_name)}
+
+verseNode_withLID_query = '''
+		query verse($bib: string, $lid: int){
+		verse(func: uid($bib))
+		@normalize {
+				~belongsTo {
+					~belongsTo{
+						~belongsTo @filter(eq(lid,$lid)){
+						  uid: uid
+		}	}	}	}	}
+	'''
+
+def add_verseTextToBible(bib_node_uid,table_name, bookcode):
+	global graph_conn
+	try:
+		db = pymysql.connect(host="localhost",database=rel_db_name, user="root", password="password", charset='utf8mb4')
+		cursor = db.cursor(pymysql.cursors.SSCursor)
+		###### to add text from the text tables in the mysql DB ###############
+		cursor.execute("SELECT LID, main.Verse from "+table_name+" as main JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID",(book_num_map[bookcode]))
+	except Exception as e:
+		logging.error('At fetching verse from mysql DB')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="MySQL side error. "+str(e))
+
+	next_row = cursor.fetchone()
+	logging.info("Adding text to the bible verse")
+	while next_row:
+		# print(next_row)
+		LID = next_row[0]
+		verse = next_row[1]
+		variables = {
+			'$bib': bib_node_uid,
+			'$lid': str(LID)
+		}
+		verseNode_query_res = graph_conn.query_data(verseNode_withLID_query,variables)
+		if len(verseNode_query_res['verse']) == 0:
+			logging.warn('Couldn\'t find the verse with lid')
+		elif len(verseNode_query_res['verse']) > 1:
+			logging.error('At fetching verse node')
+			logging.error('Matched multiple verse nodes')
+			raise HTTPException(status_code=500, detail="Graph side error. Matched multiple verse nodes.")
+		else:
+			verseNode_uid = verseNode_query_res['verse'][0]['uid']
+			verseText = {
+				'uid': verseNode_uid,
+				'verseText': verse 
+			}
+			try:
+				graph_conn.create_data(verseText)
+			except Exception as e:
+				logging.error('At adding text to verse')
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+			logging.info('text added for:',LID )
+		next_row = cursor.fetchone()
+		# break
+	cursor.close()
+	db.close()
+	return 
+
+whole_chapter_query = '''
+	query chapter($bib: string, $book: int, $chapter: int){
+	chapter(func: eq(bible, $bib)) {
+		bible
+		~belongsTo @filter(eq(bookNumber, $book)){
+		book,
+		~belongsTo @filter(eq(chapter, $chapter)){
+		chapter
+		verses: ~belongsTo {
+			verse: verse,
+			verseText: verseText,
+			words: ~belongsTo {
+				word:word,
+				twLink: twLink {
+					translationWord: translationWord,
+					description: description
+				},
+				strongsLink {
+					strongsNumber: StrongsNumber,
+					englishWord: englishWord
+				}
+
+			}
+		}
+		}
+		}
+	}
+	}
+'''
+
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}')
+def get_whole_chapter(bible_name: str, bookcode: BibleBook, chapter: int):
+	''' fetches all verses of the chapter 
+	including their strong number, tw and bible name connections
+	'''
+	result = {}
+	try:
+		variables = {'$bib': bible_name,
+					'$book': str(book_num_map[bookcode]),
+					'$chapter': str(chapter)}
+		query_res = graph_conn.query_data(whole_chapter_query,variables)
+		logging.info('query_res: %s' % query_res)
+	except Exception as e:
+		logging.error('At fetching chapter contents')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	try:
+		result = query_res['chapter'][0]['~belongsTo'][0]['~belongsTo'][0]
+	except Exception as e:
+		logging.error('At parsing chapter contents')
+		logging.error(e)
+		raise HTTPException(status_code=404, detail="Requested content not Available. ")
+	return result
+
+one_verse_query = '''
+	query verse($bib: string, $book: int, $chapter: int, $verse: int){
+	verse(func: eq(bible, $bib)) {
+		bible
+		~belongsTo @filter(eq(bookNumber, $book)){
+		book,
+		~belongsTo @filter(eq(chapter, $chapter)){
+		chapter
+		~belongsTo @filter(eq(verse, $verse)){
+			verse: verse,
+			verseText: verseText,
+			words: ~belongsTo {
+				word:word,
+				twLink: twLink {
+					translationWord: translationWord,
+					description: description
+				},
+				strongsLink {
+					strongsNumber: StrongsNumber,
+					englishWord: englishWord
+				}
+
+			}
+		}
+		}
+		}
+	}
+	}
+'''
+
+
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}')
+def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int):
+	''' fetches all verses of the chapter 
+	including their strong number, tw and bible name connections
+	'''
+	result = {}
+	try:
+		variables = {'$bib': bible_name,
+					'$book': str(book_num_map[bookcode]),
+					'$chapter': str(chapter),
+					'$verse': str(verse)}
+		query_res = graph_conn.query_data(one_verse_query,variables)
+		logging.info('query_res: %s' % query_res)
+	except Exception as e:
+		logging.error('At fetching chapter contents')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	try:
+		result = query_res['verse'][0]['~belongsTo'][0]['~belongsTo'][0]['~belongsTo'][0]
+	except Exception as e:
+		logging.error('At parsing verse contents')
+		logging.error(e)
+		raise HTTPException(status_code=404, detail="Requested content not Available. ")
+	return result
+
