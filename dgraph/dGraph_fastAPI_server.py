@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query, Path, Body, HTTPException
 import pymysql
 from dGraph_conn import dGraph_conn
-import logging, csv
+import logging, csv, urllib
 from enum import Enum
 from pydantic import BaseModel
 from typing import Optional, List
@@ -11,8 +11,13 @@ app = FastAPI()
 graph_conn = None
 rel_db_name = 'AutographaMT_Staging'
 logging.basicConfig(filename='example.log',level=logging.DEBUG)
+base_URL = 'http://localhost:9000'
 
 book_num_map = { 'mat':40, 'mrk' : 41, 'luk': 42, 'jhn': 43}
+
+num_book_map = {}
+for key in book_num_map:
+	num_book_map[book_num_map[key]] = key
 
 class BibleBook(str, Enum):
 	mat = 'mat'
@@ -90,7 +95,8 @@ strongs_link_query = '''
 			definition,
 			strongsNumberExtended,
 			englishWord,
-			occurance:~strongsLink @normalize{
+			occurances:~strongsLink @normalize{
+				~alignsTo{
 				position:position,
 				word:word,
 				belongsTo{
@@ -98,10 +104,10 @@ strongs_link_query = '''
 					belongsTo{
 						chapter:chapter,
 						belongsTo{
-						  book:book,
+						  book:bookNumber,
 						  belongsTo {
 						   bible:bible 
-	}	}	}	}	}	} }
+	}	}	}	}	}	} } }
 '''
 
 strongs_in_verse_query = '''
@@ -114,13 +120,7 @@ strongs_in_verse_query = '''
 						position: position,
 						word:word,
 						strongsLink {
-							StrongsNumber:StrongsNumber,
-							pronunciation:pronunciation,
-							lexeme:lexeme,
-							transliteration:transliteration,
-							definition:definition,
-							strongsNumberExtended:strongsNumberExtended,
-							englishWord:englishWord
+							StrongsNumber:StrongsNumber
 	}	}	}	}	}	} }
 '''
 
@@ -175,6 +175,18 @@ def get_strongs(strongs_number: Optional[int] = None, bbbcccvvv: Optional[str] =
 	if not limit:
 		limit = len(query_res['strongs'])
 	result['strongs'] = query_res['strongs'][skip+1:limit]
+	for i, strong in enumerate(result['strongs']):
+		if 'occurances' in strong:
+			occurs = []
+			for occur in strong['occurances']:
+				logging.info(occur)
+				logging.info(num_book_map)
+				verse_link = '%s/bibles/%s/books/%s/chapters/%s/verses/%s/words/%s'%(base_URL, occur['bible'], num_book_map[occur['book']], occur['chapter'], occur['verse'], occur['position'])
+				occurs.append(urllib.parse.quote(verse_link, safe='/:-'))
+			result['strongs'][i]['occurances'] = occurs
+		if 'StrongsNumber' in strong:
+			strong_link = '%s/strongs?strongs_number=%s'%(base_URL, strong['StrongsNumber'])
+			result['strongs'][i]['strongsLink'] = urllib.parse.quote(strong_link, safe='/:?=')
 	return result
 
 @app.put("/strongs/{strongs_number}", status_code = 200)
@@ -226,10 +238,10 @@ def add_strongs():
 	count_for_test = 0
 	while(True):
 		next_row = cursor.fetchone()
-		# if not next_row:
-		# 	break
-		if count_for_test>50:
+		if not next_row:
 			break
+		# if count_for_test>50:
+		# 	break
 		count_for_test += 1
 		strongID = next_row[0]
 		Pronunciation = next_row[1]
@@ -285,6 +297,7 @@ tw_link_query = '''
 		twType,
 		description,
 		occurances: ~twLink @normalize {
+			~alignsTo {
 	        position:position,
 	        word:word,
 			belongsTo{
@@ -292,10 +305,10 @@ tw_link_query = '''
 		        belongsTo{
 		            chapter:chapter,
 		            belongsTo{
-		              book:book,
+		              book:bookNumber,
 		              belongsTo {
 		               bible:bible 
-	}	}	}	}	} }	}
+	}	}	}	}	} }	} }
 '''
 
 tw_in_verse_query = '''
@@ -309,9 +322,6 @@ tw_in_verse_query = '''
 						word:word,
 						twLink {
 							translationWord:translationWord,
-							slNo:slNo,
-							twType:twType,
-							description:description,
 	}	}	}	}	}	} }
 '''
 
@@ -366,6 +376,16 @@ def get_translationwords(translation_word: Optional[str] = None, bbbcccvvv: Opti
 	if not limit:
 		limit = len(query_res['tw'])
 	result['translationWords'] = query_res['tw'][skip+1:limit]
+	for i, tw in enumerate(result['translationWords']):
+		if 'occurances' in tw:
+			occurs = []
+			for occur in tw['occurances']:
+				verse_link = '%s/bibles/%s/books/%s/chapters/%s/verses/%s/words/%s'%(base_URL, occur['bible'], num_book_map[occur['book']], occur['chapter'], occur['verse'], occur['position'])
+				occurs.append(urllib.parse.quote(verse_link, safe='/:-'))
+			result['translationWords'][i]['occurances'] = occurs
+		if 'translationWord' in tw:
+			link = '%s/translationwords?translation_word=%s'%(base_URL, tw['translationWord'])
+			result['translationWords'][i]['translationWordLink'] = urllib.parse.quote(link, safe='/:?=')
 	return result
 
 
@@ -898,6 +918,154 @@ def add_verseTextToBible(bib_node_uid,table_name, bookcode):
 	db.close()
 	return 
 
+######################### Alignment ##############################
+bible_word_query = '''
+	query bib_word($bib:string, $book:int, $chapter:int, $verse:int, $pos:int){
+	bib_word(func: uid($bib)) @normalize {
+		~belongsTo @filter(eq(bookNumber,$book)){
+			~belongsTo @filter(eq(chapter,$chapter)){
+				~belongsTo @filter(eq(verse,$verse)){
+					~belongsTo @filter(eq(position,$pos)){
+						uid : uid
+						
+					}
+				}
+			}
+		}
+	}
+	}
+'''
+
+bible_query = '''
+	query bible($name: string){
+	bible (func: has(bible)) @filter(eq(bible,$name)){
+	uid
+	}
+	}
+'''
+
+
+
+@app.post('/alignment')
+def add_alignment(source_bible: str = Body('Hin IRV4 bible'), alignment_table: str = Body('Hin_4_Grk_UGNT4_Alignment'), bookcode: BibleBook = Body('mat')):
+	global graph_conn
+
+	target_bible = 'Grk UGNT4 bible'
+
+	try:
+		db = pymysql.connect(host="localhost",database=rel_db_name, user="root", password="password", charset='utf8mb4')
+		cursor = db.cursor(pymysql.cursors.SSCursor)
+		cursor.execute("Select Book, Chapter, Verse, PositionSrc, PositionTrg, UserId, Stage, Type, UpdatedOn, LidSrc, LidTrg from "+alignment_table+" as a JOIN Bcv_LidMap as Map ON LidSrc=Map.ID where Map.Book = %s order by LidSrc, PositionSrc",(book_num_map[bookcode]))
+	except Exception as e:
+		logging.error('At fetching alignment')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="MySQL side error. "+str(e))
+
+	alignment_name = source_bible.replace('bible','')+'-'+target_bible.replace('bible','')+'Alignment'
+
+	try:
+		variables = {
+		'$name' : source_bible
+		}
+		src_bib_node_query_res = graph_conn.query_data(bible_query,variables)
+		logging.info('src_bib_node_query_res:%s' %src_bib_node_query_res)
+		src_bibNode_uid = src_bib_node_query_res['bible'][0]['uid']
+		variables = {
+		'$name' : target_bible
+		}
+		trg_bib_node_query_res = graph_conn.query_data(bible_query,variables)
+		trg_bibNode_uid = trg_bib_node_query_res['bible'][0]['uid']
+	except Exception as e:
+		logging.error('At finding bible nodes')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+
+	count_for_test = 0
+	while(True):
+		next_row = cursor.fetchone()
+		if not next_row:
+			break
+		# if count_for_test >10:
+		# 	break
+		count_for_test += 1
+
+		BookNum = str(next_row[0])
+		Chapter = str(next_row[1])
+		Verse = str(next_row[2])
+		PositionSrc = str(next_row[3])
+		PositionTrg = str(next_row[4])
+		UserId = str(next_row[5])
+		Stage = str(next_row[6])
+		Type = str(next_row[7])
+		UpdatedOn = next_row[8]
+		LidSrc = str(next_row[9])
+		LidTrg = str(next_row[10])
+		logging.info('BCV:%s %s %s'%(BookNum,Chapter,Verse))
+
+		if PositionTrg == '255' or PositionSrc == '255':
+			continue
+
+		if (LidSrc != LidTrg):
+			logging.info("Across verse alignment cannot be handled by this python script.")
+			logging.info("Found at:%s %s %s"%(BookNum,Chapter,Verse))
+			raise HTTPException(status_code=503, detail="Across verse alignment cannot be handled. "+str(e))
+
+		try:
+			src_wordNode_uid = None
+			variables = {
+				'$bib' : src_bibNode_uid,
+				'$book' : str(BookNum),
+				'$chapter' : str(Chapter),
+				'$verse' : str(Verse),
+				'$pos' : str(PositionSrc)
+			}
+			src_wordNode_query_res = graph_conn.query_data(bible_word_query,variables)
+			src_wordNode_uid = src_wordNode_query_res['bib_word'][0]['uid']
+
+			trg_wordNode_uid = None
+
+			variables2 = {
+				'$bib' : trg_bibNode_uid,
+				'$book' : str(BookNum),
+				'$chapter' : str(Chapter),
+				'$verse' : str(Verse),
+				'$pos' : str(PositionTrg)
+			}
+			trg_wordNode_query_res = graph_conn.query_data(bible_word_query,variables2)
+			trg_wordNode_uid = trg_wordNode_query_res['bib_word'][0]['uid']
+		except Exception as e:
+			logging.error('At finding word nodes')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		logging.info('src_wordNode_uid:%s'%src_wordNode_uid)
+		logging.info('trg_wordNode_uid:%s'%trg_wordNode_uid)
+
+		set_alignment_mutation = { 'uid': src_wordNode_uid,
+									'alignsTo': {
+										'uid': trg_wordNode_uid
+									}
+								}
+		try:
+			res = graph_conn.create_data(set_alignment_mutation)
+		except Exception as e:
+			logging.error('At creating alignmnet link')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	cursor.close()
+	db.close()
+	return {'msg': "Alignment added for %s and %s in %s"% (source_bible, target_bible, bookcode)}
+
+
+
+
+
+
+
+
+
+
+
+##################### Bible Content retrival ######################
 whole_chapter_query = '''
 	query chapter($bib: string, $book: int, $chapter: int){
 	chapter(func: eq(bible, $bib)) {
@@ -909,17 +1077,25 @@ whole_chapter_query = '''
 		verses: ~belongsTo {
 			verse: verse,
 			verseText: verseText,
-			words: ~belongsTo {
+			words: ~belongsTo @normalize{
 				word:word,
+				position: position,
 				twLink: twLink {
 					translationWord: translationWord,
-					description: description
 				},
 				strongsLink {
 					strongsNumber: StrongsNumber,
 					englishWord: englishWord
 				}
-
+				alignsTo: alignsTo {
+					twLink: twLink {
+						translationWord: translationWord,
+					}
+					strongsLink {
+						strongsNumber: StrongsNumber,
+						englishWord: englishWord
+					}
+				}
 			}
 		}
 		}
@@ -946,6 +1122,14 @@ def get_whole_chapter(bible_name: str, bookcode: BibleBook, chapter: int):
 		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 	try:
 		result = query_res['chapter'][0]['~belongsTo'][0]['~belongsTo'][0]
+		for j,ver in enumerate(result['verses']):
+			for i,wrd in enumerate(ver['words']):
+				if 'translationWord' in wrd:
+					link = '%s/translationwords?translation_word=%s'%(base_URL, wrd['translationWord'])
+					result['verses'][j]['words'][i]['translationWordLink'] = urllib.parse.quote(link, safe='/:?=')
+				if 'strongsNumber' in wrd:
+					link = '%s/strongs?strongs_number=%s'%(base_URL, wrd['strongsNumber'])
+					result['verses'][j]['words'][i]['strongsLink'] = urllib.parse.quote(link, safe='/:?=')
 	except Exception as e:
 		logging.error('At parsing chapter contents')
 		logging.error(e)
@@ -963,15 +1147,24 @@ one_verse_query = '''
 		~belongsTo @filter(eq(verse, $verse)){
 			verse: verse,
 			verseText: verseText,
-			words: ~belongsTo {
+			words: ~belongsTo @normalize{
 				word:word,
+				position: position,
 				twLink: twLink {
 					translationWord: translationWord,
-					description: description
 				},
 				strongsLink {
 					strongsNumber: StrongsNumber,
 					englishWord: englishWord
+				}
+				alignsTo: alignsTo {
+					twLink: twLink {
+						translationWord: translationWord,
+					}
+					strongsLink {
+						strongsNumber: StrongsNumber,
+						englishWord: englishWord
+					}
 				}
 
 			}
@@ -1002,9 +1195,86 @@ def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int
 		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 	try:
 		result = query_res['verse'][0]['~belongsTo'][0]['~belongsTo'][0]['~belongsTo'][0]
+		for i,wrd in enumerate(result['words']):
+			if 'translationWord' in wrd:
+				link = '%s/translationwords?translation_word=%s'%(base_URL, wrd['translationWord'])
+				result['words'][i]['translationWordLink'] = urllib.parse.quote(link, safe='/:?=')
+			if 'strongsNumber' in wrd:
+				link = '%s/strongs?strongs_number=%s'%(base_URL, wrd['strongsNumber'])
+				result['words'][i]['strongsLink'] = urllib.parse.quote(link, safe='/:?=')
 	except Exception as e:
 		logging.error('At parsing verse contents')
 		logging.error(e)
 		raise HTTPException(status_code=404, detail="Requested content not Available. ")
 	return result
 
+word_query = '''
+	query word($bib: string, $book: int, $chapter: int, $verse: int, $pos: int){
+	word(func: eq(bible, $bib)) {
+		bible
+		~belongsTo @filter(eq(bookNumber, $book)){
+		book,
+		~belongsTo @filter(eq(chapter, $chapter)){
+		chapter
+		~belongsTo @filter(eq(verse, $verse)){
+			verse: verse,
+			verseText: verseText,
+			words: ~belongsTo @filter(eq(position, $pos)) @normalize{
+				word:word,
+				position: position,
+				twLink: twLink {
+					translationWord: translationWord,
+				},
+				strongsLink {
+					strongsNumber: StrongsNumber,
+					englishWord: englishWord
+				}
+				alignsTo: alignsTo {
+					twLink: twLink {
+						translationWord: translationWord,
+					}
+					strongsLink {
+						strongsNumber: StrongsNumber,
+						englishWord: englishWord
+					}
+				}
+
+			}
+		}
+		}
+		}
+	}
+	}
+'''
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}')
+def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: int, position: int):
+	''' fetches all verses of the chapter 
+	including their strong number, tw and bible name connections
+	'''
+	result = {}
+	try:
+		variables = {'$bib': bible_name,
+					'$book': str(book_num_map[bookcode]),
+					'$chapter': str(chapter),
+					'$verse': str(verse),
+					'$pos': str(position)}
+		query_res = graph_conn.query_data(word_query,variables)
+		logging.info('query_res: %s' % query_res)
+	except Exception as e:
+		logging.error('At fetching chapter contents')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	try:
+		result = query_res['word'][0]['~belongsTo'][0]['~belongsTo'][0]['~belongsTo'][0]
+		for i,wrd in enumerate(result['words']):
+			if 'translationWord' in wrd:
+				link = '%s/translationwords?translation_word=%s'%(base_URL, wrd['translationWord'])
+				result['words'][i]['translationWordLink'] = urllib.parse.quote(link, safe='/:?=')
+			if 'strongsNumber' in wrd:
+				link = '%s/strongs?strongs_number=%s'%(base_URL, wrd['strongsNumber'])
+				result['words'][i]['strongsLink'] = urllib.parse.quote(link, safe='/:?=')
+	except Exception as e:
+		logging.error('At parsing verse contents')
+		logging.error(e)
+		raise HTTPException(status_code=404, detail="Requested content not Available. ")
+	return result
