@@ -13,17 +13,40 @@ rel_db_name = 'AutographaMT_Staging'
 logging.basicConfig(filename='example.log',level=logging.DEBUG)
 base_URL = 'http://localhost:9000'
 
-book_num_map = { 'mat':40, 'mrk' : 41, 'luk': 42, 'jhn': 43}
+book_num_map = { "mat": 40 ,"mrk": 41 ,"luk": 42 ,"jhn": 43 ,"act": 44 ,"rom": 45 ,"1co": 46 ,"2co": 47 ,"gal": 48 ,"eph": 49 ,"php": 50 ,"col": 51 ,"1th": 52 ,"2th": 53 ,"1ti": 54 ,"2ti": 55 ,"tit": 56 ,"phm": 57 ,"heb": 58 ,"jas": 59 ,"1pe": 60 ,"2pe": 61 ,"1jn": 62 ,"2jn": 63 ,"3jn": 64 ,"jud": 65 ,"rev": 66}
 
 num_book_map = {}
 for key in book_num_map:
 	num_book_map[book_num_map[key]] = key
 
 class BibleBook(str, Enum):
-	mat = 'mat'
-	mrk = 'mrk'
-	luk = 'luk'
-	jhn = 'jhn'
+	mat = "mat"
+	mrk = "mrk"
+	luk = "luk"
+	jhn = "jhn"
+	act = "act"
+	rom = "rom"
+	co1 = "1co"
+	co2 = "2co"
+	gal = "gal"
+	eph = "eph"
+	php = "php"
+	col = "col"
+	th1 = "1th"
+	th2 = "2th"
+	ti1 = "1ti"
+	ti2 = "2ti"
+	tit = "tit"
+	phm = "phm"
+	heb = "heb"
+	jas = "jas"
+	pe1 = "1pe"
+	pe2 = "2pe"
+	jn1 = "1jn"
+	jn2 = "2jn"
+	jn3 = "3jn"
+	jud = "jud"
+	rev = "rev"
 
 class Reference(BaseModel):
 	book : BibleBook
@@ -37,7 +60,7 @@ def test():
 
 ############### Graph #####################
 
-@app.get("/graph", status_code = 200)
+@app.get("/graph", status_code = 200, tags=["READ", "Graph"])
 def connect_Graph():
 	''' connects to the dgraph server'''
 	global graph_conn
@@ -49,7 +72,7 @@ def connect_Graph():
 		raise HTTPException(status_code=502, detail="Not connected to Graph. "+ str(e))
 	return {'msg': 'Connected to graph'}
 
-@app.delete("/graph", status_code=200)
+@app.delete("/graph", status_code=200, tags=["Graph", "WRITE"])
 def delete():
 	''' delete the entire graph'''
 	global graph_conn
@@ -141,7 +164,7 @@ class StrongsPropertyValue(BaseModel):
 	property: StrongsProperty
 	value: str
 
-@app.get("/strongs", status_code=200)
+@app.get("/strongs", status_code=200, tags=["READ", "Strongs Number"])
 def get_strongs(strongs_number: Optional[int] = None, bbbcccvvv: Optional[str] = Query(None, regex='^\w\w\w\d\d\d\d\d\d'), skip: Optional[int] =None, limit: Optional[int]=None):
 	''' Get the list of strongs nodes and their property values.
 	If strongs_number is sepcified, its properties and occurances are returned.
@@ -189,7 +212,7 @@ def get_strongs(strongs_number: Optional[int] = None, bbbcccvvv: Optional[str] =
 			result['strongs'][i]['strongsLink'] = urllib.parse.quote(strong_link, safe='/:?=')
 	return result
 
-@app.put("/strongs/{strongs_number}", status_code = 200)
+@app.put("/strongs/{strongs_number}", status_code = 200, tags=["Strongs Number", "WRITE"])
 def edit_strongs(strongs_number: int, key_values: List[StrongsPropertyValue] = Body(...)):
 	''' Update a property value of selected strongs number node'''
 	logging.info("input args strongs_number: %s, key_values: %s" % (strongs_number, key_values))
@@ -206,7 +229,7 @@ def edit_strongs(strongs_number: int, key_values: List[StrongsPropertyValue] = B
 	raise HTTPException(status_code=503, detail="Not implemented properly. ")
 
 
-@app.post("/strongs", status_code=201)
+@app.post("/strongs", status_code=201, tags=["WRITE", "Strongs Number"])
 def add_strongs():
 	'''creates a strongs dictionary.
 	 Collects strongs data from mysql DB and add to graph 
@@ -342,7 +365,7 @@ class TwPropertyValue(BaseModel):
 	value: str
 
 
-@app.get("/translationwords", status_code=200)
+@app.get("/translationwords", status_code=200, tags=["READ", "Translation Words"])
 def get_translationwords(translation_word: Optional[str] = None, bbbcccvvv: Optional[str] = Query(None, regex='^\w\w\w\d\d\d\d\d\d'), skip: Optional[int] =None, limit: Optional[int]=None):
 	''' Get the list of Translation word nodes and their property values.
 	If Translation word is sepcified, its properties and occurances are returned.
@@ -389,7 +412,7 @@ def get_translationwords(translation_word: Optional[str] = None, bbbcccvvv: Opti
 	return result
 
 
-@app.put("/translationwords/{translation_word}", status_code = 200)
+@app.put("/translationwords/{translation_word}", status_code = 200, tags=["WRITE", "Translation Words"])
 def edit_translationwords(translation_word: str, key_values: List[TwPropertyValue] = Body(...)):
 	''' Update a property value of selected Translation word'''
 	logging.info("input args translation_word: %s, key_values: %s" % (translation_word, key_values))
@@ -406,7 +429,7 @@ def edit_translationwords(translation_word: str, key_values: List[TwPropertyValu
 	raise HTTPException(status_code=503, detail="Not implemented properly. ")
 
 
-@app.post("/translationwords", status_code=201)
+@app.post("/translationwords", status_code=201, tags=["WRITE", "Translation Words"])
 def add_translationwords():
 	'''creates a translation word dictionary.
 	 Collects tw data from CSV file and adds to graph 
@@ -588,7 +611,7 @@ class BiblePropertyValue(BaseModel):
 	property: BibleProperty
 	value: str
 
-@app.get('/bibles', status_code=200)
+@app.get('/bibles', status_code=200, tags=["READ", "Bible Contents"])
 def get_bibles(bible_name : Optional[str] = None, language: Optional[str] = None, skip: Optional[int] = None, limit: Optional[int] = None):
 	''' fetches bibles nodes, properties and available books. 
 	If no query params are given, all bibles in graph are fetched.
@@ -618,7 +641,7 @@ def get_bibles(bible_name : Optional[str] = None, language: Optional[str] = None
 	result['bibles'] = query_res['bibles'][skip+1:limit]
 	return result
 
-@app.put('/bibles/{bible_name}', status_code=200)
+@app.put('/bibles/{bible_name}', status_code=200, tags=["WRITE", "Bible Contents"])
 def edit_bible(bible_name: str, key_values: List[BiblePropertyValue]):
 	''' Update a property value of selected bible node'''
 	logging.info("input args bible_name: %s, key_values: %s" % (bible_name, key_values))
@@ -635,7 +658,7 @@ def edit_bible(bible_name: str, key_values: List[BiblePropertyValue]):
 	raise HTTPException(status_code=503, detail="Not implemented properly. ")
 
 
-@app.post('/bibles', status_code = 200)
+@app.post('/bibles', status_code = 200, tags=["WRITE", "Bible Contents"])
 def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("Hindi"), version: str = Body('IRV4'), tablename: str = Body('Hin_IRV4_BibleWord'), bookcode: BibleBook = Body('mat')):
 	''' create a bible node, fetches contents from specified table in MySQL DB and adds to Graph.
 	Currently the API is implemented to add only one book at a time. 
@@ -856,7 +879,10 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 
 	cursor.close()
 	db.close()
-	add_verseTextToBible(bib_node_uid, tablename.replace('BibleWord','Text'), bookcode.value)	
+	text_tablename = tablename.replace('BibleWord','Text')
+	if text_tablename == 'Grk_UGNT4_Text':
+		text_tablename = 'Grk_UGNT_Text'
+	add_verseTextToBible(bib_node_uid, text_tablename, bookcode.value)	
 	return {'msg': "Added %s in %s" %(bookcode, bible_name)}
 
 verseNode_withLID_query = '''
@@ -946,7 +972,7 @@ bible_query = '''
 
 
 
-@app.post('/alignment')
+@app.post('/alignment', status_code=201, tags=["WRITE", "Bible Contents"])
 def add_alignment(source_bible: str = Body('Hin IRV4 bible'), alignment_table: str = Body('Hin_4_Grk_UGNT4_Alignment'), bookcode: BibleBook = Body('mat')):
 	global graph_conn
 
@@ -1104,7 +1130,7 @@ whole_chapter_query = '''
 	}
 '''
 
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}')
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}', status_code=200, tags=["READ", "Bible Contents"])
 def get_whole_chapter(bible_name: str, bookcode: BibleBook, chapter: int):
 	''' fetches all verses of the chapter 
 	including their strong number, tw and bible name connections
@@ -1176,7 +1202,7 @@ one_verse_query = '''
 '''
 
 
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}')
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}', status_code=200, tags=["READ", "Bible Contents"])
 def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int):
 	''' fetches all verses of the chapter 
 	including their strong number, tw and bible name connections
@@ -1246,7 +1272,7 @@ word_query = '''
 	}
 	}
 '''
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}')
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}', status_code=200, tags=["READ", "Bible Contents"])
 def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: int, position: int):
 	''' fetches all verses of the chapter 
 	including their strong number, tw and bible name connections
