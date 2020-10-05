@@ -43,7 +43,11 @@ class dGraph_conn:
 			<referenceVerse>: [uid] @reverse .
 			<language>: string @index(exact) .
 			<title>: string @index(exact) .
-
+			<externalUid>: string @index(exact) .
+			<name>: string @index(exact) .
+			<father>: [uid] @reverse .
+			<mother>: [uid] @reverse .
+			<spouse>: [uid] @reverse .
 		'''
 
 		self.set_schema(schema)

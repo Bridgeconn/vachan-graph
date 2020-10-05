@@ -38,8 +38,8 @@ def parseXML(xmlfile,flag):
 	return names_list 
 
 def get_nt_ot_names_from_ubs():  
-	names = parseXML('2008-04-entity-database/ubs-names-ot.xml','ot')
-	names += parseXML('2008-04-entity-database/ubs-names-nt.xml','nt')
+	names = parseXML('Resources/BibleNames/ubs-names-ot.xml','ot')
+	names += parseXML('Resources/BibleNames/ubs-names-nt.xml','nt')
 	return names
 
 # names = get_nt_ot_names_from_ubs()

@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Query, Path, Body, HTTPException
 import pymysql
 from dGraph_conn import dGraph_conn
-import logging, csv, urllib
+import logging, csv, urllib, json
 from enum import Enum
 from pydantic import BaseModel
 from typing import Optional, List
 
+from Resources.BibleNames.ubs_xlm_parser import get_nt_ot_names_from_ubs
 
 app = FastAPI()
 graph_conn = None
@@ -1304,3 +1305,386 @@ def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: in
 		logging.error(e)
 		raise HTTPException(status_code=404, detail="Requested content not Available. ")
 	return result
+
+
+
+	############### Bible Names ##################
+
+dict_node_query  = """
+				query dict($dict: string){
+				  dict(func: eq(dictionary, $dict)){
+				  	uid
+				} }"""
+
+name_X_uid_query = """
+			query name($xuid: string){
+			name(func: eq(externalUid, $xuid)){
+				uid,
+				name
+			} }
+"""
+
+family_tree_query = '''
+	query person($xuid: string){
+	relation(func: eq(externalUid,$xuid)){
+	  externalUid,
+	  name,
+	  spouse{
+	    externalUid,
+    	name,
+    	child: ~father{
+    	  externalUid,
+          name
+	  	},
+	    child2: ~mother{
+	  	  externalUid,
+	  	  name
+		}
+  	  },
+  	  child: ~father{
+  	    externalUid,
+  	    name
+	    },
+      child2: ~mother{
+  	    externalUid,
+  	    name
+        },
+      father{
+        externalUid,
+        name,
+    spouse{
+      externalUid,
+      name
+ 	},
+    grandFather: father{
+      externalUid,
+      name,
+      spouse{
+    	externalUid,
+    	name
+ 	  }
+    },
+    grandMother: mother{
+      externalUid,
+      name,
+      spouse{
+    		externalUid,
+    		name
+  		}
+    }
+    
+  },
+  mother{
+    externalUid,
+    name,
+    spouse{
+    	externalUid,
+    	name
+  	},
+    grandFather: father{
+      externalUid,
+      name,
+      spouse{
+        externalUid,
+        name
+      }
+    }
+    grandMother: mother{
+      externalUid,
+      name,
+      spouse{
+        externalUid,
+        name
+      }
+    }
+  }
+}
+}
+'''
+
+
+@app.post("/names", status_code=201, tags=["WRITE", "Bible Names"])
+def add_names():
+	'''creates a Bible names dictionary.
+	* Pass I: Collect names from factgrid, ubs and wiki files and add to dictionary.
+	* Pass II: Connect the names to each other based on known relations
+	* Pass III: Connects names to each other using "sameAs" relation 
+	* Pass IV: Connects names to bible Words in English ULB bible
+	 '''
+	nodename = 'Bible Names'
+
+	variables = {"$dict": nodename}
+
+	dict_node_query_result = graph_conn.query_data(dict_node_query, variables)
+	if len(dict_node_query_result['dict']) == 0:
+		# create a dictionary nodename
+		dict_node = { 'dictionary': nodename
+				}
+		try:
+			dict_node_uid = graph_conn.create_data(dict_node)
+		except Exception as e:
+			logging.error("At dict node creation")
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	elif len(dict_node_query_result['dict']) == 1 :
+		dict_node_uid = dict_node_query_result['dict'][0]['uid']
+	else:
+		logging.error("At dict node fetch")
+		logging.error("More than one node matched")
+		raise HTTPException(status_code=502, detail="Graph side error. More than one node matched")
+	logging.info('dict_node_uid: %s' %dict_node_uid)
+
+	factgrid_file = open('Resources/BibleNames/factgrid_person_query.json','r').read()
+	factgrid_names = json.loads(factgrid_file)
+	wiki_file = open('Resources/BibleNames/wiki_person_query.json','r').read()
+	wiki_names = json.loads(wiki_file)
+	ubs_names = get_nt_ot_names_from_ubs()
+
+	# logging.info("factgrid_names: [%s,...]"%factgrid_names[0])
+	# logging.info("ubs_names: [%s,...]"%ubs_names[0])
+	# logging.info("wiki_names: [%s,...]"%wiki_names[0])
+
+	###Pass I #####
+	logging.info("Pass I: Adding names to dictionary")
+
+	# for name in factgrid_names:
+	# 	external_uid = name['Person']
+	# 	label = name['PersonLabel']
+	# 	desc = ""
+	# 	if "," in label:
+	# 		label1, label2 = label.split(",", 1)
+	# 		label = label1
+	# 		desc = label2 + ". "
+
+	# 	name_node = {
+	# 	 "externalUid": external_uid,
+	# 	 "name": label,
+	# 	 "belongsTo": {
+	# 	 	"uid": dict_node_uid
+	# 	 }
+	# 	}
+	# 	if "PersonDescription" in name:
+	# 		desc += name['PersonDescription']
+	# 	if desc != "":
+	# 		name_node['description'] = desc.strip()
+
+	# 	if "GenderLabel" in name:
+	# 		name_node['gender'] = name['GenderLabel']
+
+	# 	try:
+	# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query, {"$xuid": external_uid})
+	# 		if len(name_X_uid_query_res['name']) > 0:
+	# 			logging.warn("Skipping name node creation")
+	# 			logging.warn("Name already exists\nNew name node: %s\nExisting node: %s"%(name_node, name_X_uid_query_res['name'][0]))
+	# 		else:
+	# 			name_node_uid = graph_conn.create_data(name_node)
+	# 			logging.info('name: %s, name_node_uid: %s' %(label, name_node_uid))
+	# 	except Exception as e:
+	# 		logging.error("At name node creation")
+	# 		logging.error(e)
+	# 		raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	# for name in ubs_names:
+	# 	external_uid = "ubs_name/"+name['id']
+	# 	label = name['name']
+
+	# 	name_node = {
+	# 	 "externalUid": external_uid,
+	# 	 "name": label,
+	# 	 "belongsTo": {
+	# 	 	"uid": dict_node_uid
+	# 	 }
+	# 	}
+	# 	if "description" in name:
+	# 		name_node['description'] = name['description'].strip()
+
+
+	# 	try:
+	# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query, {"$xuid": external_uid})
+	# 		if len(name_X_uid_query_res['name']) > 0:
+	# 			logging.warn("Skipping name node creation")
+	# 			logging.warn("Name already exists\nNew name node: %s\nExisting node: %s"%(name_node, name_X_uid_query_res['name'][0]))
+	# 		else:
+	# 			name_node_uid = graph_conn.create_data(name_node)
+	# 			logging.info('name: %s, name_node_uid: %s' %(label, name_node_uid))
+	# 	except Exception as e:
+	# 		logging.error("At name node creation")
+	# 		logging.error(e)
+	# 		raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	# for name in wiki_names:
+	# 	external_uid = name['item']
+	# 	label = name['itemLabel']
+
+	# 	name_node = {
+	# 	 "externalUid": external_uid,
+	# 	 "name": label,
+	# 	 "belongsTo": {
+	# 	 	"uid": dict_node_uid
+	# 	 }
+	# 	}
+	# 	if "itemDescription" in name:
+	# 		name_node['description'] = name['itemDescription'].strip()
+	# 	if "gender" in name:
+	# 		name_node['gender'] = name['gender'].strip()
+	# 	if "birthdate" in name:
+	# 		name_node['birthdate'] = name['birthdate'].strip()
+	# 	if "deathdate" in name:
+	# 		name_node['deathdate'] = name['deathdate'].strip()
+	# 	if "birthPlaceLabel" in name:
+	# 		name_node['birthPlace'] = name['birthPlaceLabel'].strip()
+	# 	if "deathPlaceLabel" in name:
+	# 		name_node['deathPlace'] = name['deathPlaceLabel'].strip()
+
+
+	# 	try:
+	# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query, {"$xuid": external_uid})
+	# 		if len(name_X_uid_query_res['name']) > 0:
+	# 			logging.warn("Skipping name node creation")
+	# 			logging.warn("Name already exists\nNew name node: %s\nExisting node: %s"%(name_node, name_X_uid_query_res['name'][0]))
+	# 		else:
+	# 			name_node_uid = graph_conn.create_data(name_node)
+	# 			logging.info('name: %s, name_node_uid: %s' %(label, name_node_uid))
+	# 	except Exception as e:
+	# 		logging.error("At name node creation")
+	# 		logging.error(e)
+	# 		raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	####Pass II ####
+	logging.info("Pass II: connecting names via known relations")
+
+	for name in factgrid_names:
+		external_uid = name['Person']
+		try:
+			name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": external_uid})
+			if len(name_X_uid_query_res['name']) == 1:
+				name_node_uid = name_X_uid_query_res['name'][0]['uid']
+			else:
+				logging.error("At name node fetching")
+				logging.error("Name node not found: %s"%external_uid)
+				raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+		except Exception as e:
+				logging.error("At name node fetching")
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+		name_node = {'uid': name_node_uid}
+
+		# if 'Father' in name:
+		# 	father_external_uid = name['Father']
+		# 	try:
+		# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": father_external_uid})
+		# 		if len(name_X_uid_query_res['name']) == 1:
+		# 			father_node_uid = name_X_uid_query_res['name'][0]['uid']
+		# 			name_node['father'] = {'uid': father_node_uid}
+		# 		else:
+		# 			logging.warn("At name node fetching")
+		# 			logging.warn("Name node not found: %s"%father_external_uid)
+		# 			# raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+		# 	except Exception as e:
+		# 			logging.error("At name node fetching")
+		# 			logging.error(e)
+		# 			raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+		# if 'Mother' in name:
+		# 	mother_external_uid = name['Mother']
+		# 	try:
+		# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": mother_external_uid})
+		# 		if len(name_X_uid_query_res['name']) == 1:
+		# 			mother_node_uid = name_X_uid_query_res['name'][0]['uid']
+		# 			name_node['mother'] = {'uid': mother_node_uid}	
+		# 		else:
+		# 			logging.warn("At name node fetching")
+		# 			logging.warn("Name node not found: %s"%mother_external_uid)
+		# 			# raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+		# 	except Exception as e:
+		# 		logging.error("At name node fetching")
+		# 		logging.error(e)
+		# 		raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+		# if "father" in name_node or "mother" in name_node:
+		# 	try:
+		# 		graph_conn.create_data(name_node)
+		# 	except Exception as e:
+		# 		logging.error("At name connecting")
+		# 		logging.error(e)
+		# 		raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	# for name in wiki_names:
+	# 	external_uid = name['item']
+	# 	try:
+	# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": external_uid})
+	# 		if len(name_X_uid_query_res['name']) == 1:
+	# 			name_node_uid = name_X_uid_query_res['name'][0]['uid']
+	# 		else:
+	# 			logging.error("At name node fetching")
+	# 			logging.error("Name node not found: %s"%external_uid)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+	# 	except Exception as e:
+	# 			logging.error("At name node fetching")
+	# 			logging.error(e)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	# 	name_node = {'uid': name_node_uid}
+
+	# 	if 'father' in name:
+	# 		father_external_uid = name['father']
+	# 		try:
+	# 			name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": father_external_uid})
+	# 			if len(name_X_uid_query_res['name']) == 1:
+	# 				father_node_uid = name_X_uid_query_res['name'][0]['uid']
+	# 				name_node['father'] = {'uid': father_node_uid}
+	# 			else:
+	# 				logging.warn("At name node fetching")
+	# 				logging.warn("Name node not found: %s"%father_external_uid)
+	# 				# raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+	# 		except Exception as e:
+	# 				logging.error("At name node fetching")
+	# 				logging.error(e)
+	# 				raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	# 	if 'mother' in name:
+	# 		mother_external_uid = name['mother']
+	# 		try:
+	# 			name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": mother_external_uid})
+	# 			if len(name_X_uid_query_res['name']) == 1:
+	# 				mother_node_uid = name_X_uid_query_res['name'][0]['uid']
+	# 				name_node['mother'] = {'uid': mother_node_uid}	
+	# 			else:
+	# 				logging.warn("At name node fetching")
+	# 				logging.warn("Name node not found: %s"%mother_external_uid)
+	# 				# raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+	# 		except Exception as e:
+	# 			logging.error("At name node fetching")
+	# 			logging.error(e)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	# 	if 'spouse' in name:
+	# 		spouse_external_uid = name['spouse']
+	# 		try:
+	# 			name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": spouse_external_uid})
+	# 			if len(name_X_uid_query_res['name']) == 1:
+	# 				spouse_node_uid = name_X_uid_query_res['name'][0]['uid']
+	# 				name_node['spouse'] = {'uid': spouse_node_uid}	
+	# 			else:
+	# 				logging.warn("At name node fetching")
+	# 				logging.warn("Name node not found: %s"%spouse_external_uid)
+	# 				# raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+	# 		except Exception as e:
+	# 			logging.error("At name node fetching")
+	# 			logging.error(e)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+
+	# 	if "father" in name_node or "mother" in name_node or "spouse" in name_node:
+	# 		try:
+	# 			graph_conn.create_data(name_node)
+	# 		except Exception as e:
+	# 			logging.error("At name connecting")
+	# 			logging.error(e)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+	##### Pass III ######
+
+
+	return {'msg': "Added names"}
