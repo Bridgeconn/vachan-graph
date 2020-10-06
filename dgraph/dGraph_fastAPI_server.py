@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query, Path, Body, HTTPException
 import pymysql
 from dGraph_conn import dGraph_conn
-import logging, csv, urllib, json
+import logging, csv, urllib, json, itertools
 from enum import Enum
 from pydantic import BaseModel
 from typing import Optional, List
@@ -1553,22 +1553,22 @@ def add_names():
 	####Pass II ####
 	logging.info("Pass II: connecting names via known relations")
 
-	for name in factgrid_names:
-		external_uid = name['Person']
-		try:
-			name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": external_uid})
-			if len(name_X_uid_query_res['name']) == 1:
-				name_node_uid = name_X_uid_query_res['name'][0]['uid']
-			else:
-				logging.error("At name node fetching")
-				logging.error("Name node not found: %s"%external_uid)
-				raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
-		except Exception as e:
-				logging.error("At name node fetching")
-				logging.error(e)
-				raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+	# for name in factgrid_names:
+	# 	external_uid = name['Person']
+	# 	try:
+	# 		name_X_uid_query_res = graph_conn.query_data(name_X_uid_query,{"$xuid": external_uid})
+	# 		if len(name_X_uid_query_res['name']) == 1:
+	# 			name_node_uid = name_X_uid_query_res['name'][0]['uid']
+	# 		else:
+	# 			logging.error("At name node fetching")
+	# 			logging.error("Name node not found: %s"%external_uid)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. Name node not found.")
+	# 	except Exception as e:
+	# 			logging.error("At name node fetching")
+	# 			logging.error(e)
+	# 			raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
 
-		name_node = {'uid': name_node_uid}
+	# 	name_node = {'uid': name_node_uid}
 
 		# if 'Father' in name:
 		# 	father_external_uid = name['Father']
@@ -1686,5 +1686,71 @@ def add_names():
 
 	##### Pass III ######
 
+	logging.info("Pass III: Connecting names via sameAs relations based on manually connected data")
+
+	connection_file = open('Resources/BibleNames/connected_ne.json').read()
+	connections = json.loads(connection_file)
+
+	factgrid_id_pattern = "https://database.factgrid.de/entity/"
+	wiki_id_pattern = 'http://www.wikidata.org/entity/'
+	ubs_id_pattern = 'ubs_name/'
+
+	for conn in connections:
+		if conn['linked'] != "manual":
+			continue
+		ids = []
+		if 'factgrid' in conn:
+			f_ids = set(conn['factgrid'])
+			ids += [factgrid_id_pattern+id for id in f_ids]
+		if 'ubs' in conn:
+			u_ids = set(conn['ubs'])
+			ids += [ubs_id_pattern+id for id in u_ids]
+		if 'wiki' in conn:
+			w_ids = set(conn['wiki'])
+			ids += [wiki_id_pattern+id for id in w_ids]
+
+		for a, b in itertools.product(ids,ids):
+			if a == b:
+				continue
+			try:
+				name_X_uid_query_res = graph_conn.query_data(name_X_uid_query, {'$xuid': a.strip()})
+				if (len(name_X_uid_query_res['name']) == 1):
+					a_node_uid = name_X_uid_query_res['name'][0]['uid']
+				else:
+					logging.warn("At fetching name nodes")
+					logging.warn("cannot find one node for a_node: %s"%a)
+					logging.warn("got query result: %s"%name_X_uid_query_res)
+					continue
+			except Exception as e:
+				logging.error("At fetching name nodes")
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+			try:
+				name_X_uid_query_res = graph_conn.query_data(name_X_uid_query, {'$xuid': b.strip()})
+				if (len(name_X_uid_query_res['name']) == 1):
+					b_node_uid = name_X_uid_query_res['name'][0]['uid']
+				else:
+					logging.warn("At fetching name nodes")
+					logging.warn("cannot find one node for b_node: %s"%b)
+					logging.warn("got query result: %s"%name_X_uid_query_res)
+					continue
+			except Exception as e:
+				logging.error("At fetching name nodes")
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
+
+			sameAs_connection = {
+				"uid": a_node_uid,
+				"sameAs": { 
+					"uid": b_node_uid
+				}
+			}
+
+			try:
+				graph_conn.create_data(sameAs_connection)
+			except Exception as e:
+				logging.error("At name connecting via sameAs")
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+ str(e))
 
 	return {'msg': "Added names"}

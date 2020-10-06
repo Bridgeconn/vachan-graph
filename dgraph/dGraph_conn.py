@@ -48,6 +48,7 @@ class dGraph_conn:
 			<father>: [uid] @reverse .
 			<mother>: [uid] @reverse .
 			<spouse>: [uid] @reverse .
+			<sameAs>: [uid] @reverse .
 		'''
 
 		self.set_schema(schema)
