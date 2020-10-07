@@ -20,19 +20,20 @@ def parseXML(xmlfile,flag):
 		# name['original-word'] = item.find('Word').text
 		name['description'] = item.find('Subentry/Definition-EN').text
 		# name['type'] = item.find('Subentry/Class').text
-		name['occurances'] = {}
+		# name['occurances'] = {}
+		name['occurances'] = []
 		for ref in item.find('Subentry/References'):
 			bbbcccvvv__ = ref.text
 			book = int(bbbcccvvv__[:3])
 			book_name = books_lookup[book]
-			# chapter = int(bbbcccvvv__[3:6])
-			# verse = int(bbbcccvvv__[6:9])
-			# pos = int(bbbcccvvv__[9:])
-			# name['occurances'].append((book,chapter,verse,pos))
-			if book_name not in name['occurances']:
-				name['occurances'][book_name] = 1
-			else:
-				name['occurances'][book_name] += 1
+			chapter = int(bbbcccvvv__[3:6])
+			verse = int(bbbcccvvv__[6:9])
+			pos = int(bbbcccvvv__[9:])
+			name['occurances'].append((book,chapter,verse,pos))
+			# if book_name not in name['occurances']:
+			# 	name['occurances'][book_name] = 1
+			# else:
+			# 	name['occurances'][book_name] += 1
 		names_list.append(name) 
 	  
 	return names_list 
