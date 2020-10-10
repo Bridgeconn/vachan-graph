@@ -1,4 +1,7 @@
 from fastapi import FastAPI, Query, Path, Body, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
 import pymysql
 from dGraph_conn import dGraph_conn
 import logging, csv, urllib, json, itertools, re
@@ -6,13 +9,17 @@ from enum import Enum
 from pydantic import BaseModel
 from typing import Optional, List
 
+import networkx as nx
+import matplotlib.pyplot as plt
+
 from Resources.BibleNames.ubs_xlm_parser import get_nt_ot_names_from_ubs
 
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 graph_conn = None
 rel_db_name = 'AutographaMT_Staging'
 logging.basicConfig(filename='example.log',level=logging.DEBUG)
-base_URL = 'http://localhost:9000'
+base_URL = 'http://localhost:7000'
 
 non_letters = [',', '"', '!', '.', '\n', '\\','“','”','“','*','।','?',';',"'","’","(",")","‘","—"]
 non_letter_pattern = re.compile(r'['+''.join(non_letters)+']')
@@ -1328,96 +1335,140 @@ name_X_uid_query = """
 			} }
 """
 
-same_names_query = """
-			query name($xuid: string){
-			name(func: eq(externalUid, $xuid)){
-				uid: uid,
-				name,
-				sameAs{
-					name
-				}
+all_names_query = """
+			query names($skip: int, $limit: int){
+			names(func: has(externalUid), offset: $skip, first: $limit) {
+					name:name,
+					externalUid: externalUid,
+					description: description,
+					gender: gender,
+					bornIn: brithPlace,
+					brithDate: birthDate,
+					diedIn:deathPlace,
+					deathDate: deathDate
+					sameAs{
+						otherName:name,
+						otherExternalUid: externalUid
+					}
 			} }
 """
 
+one_name_xuid_query = """
+			query names($skip: int, $limit: int, $xuid: string){
+			names(func: eq(externalUid, $xuid), offset: $skip, first: $limit){
+					name:name,
+					externalUid: externalUid,
+					description: description,
+					gender: gender,
+					bornIn: brithPlace,
+					brithDate: birthDate,
+					diedIn:deathPlace,
+					deathDate: deathDate
+					sameAs{
+						otherName:name,
+						otherExternalUid: externalUid
+					}
+			} } 
+"""
+
+name_match_query = """
+			query names($skip: int, $limit: int, $name: string){
+			names(func: eq(name, $name), offset: $skip, first: $limit) {
+					name:name,
+					externalUid: externalUid,
+					description: description,
+					gender: gender,
+					bornIn: brithPlace,
+					brithDate: birthDate,
+					diedIn:deathPlace,
+					deathDate: deathDate
+					sameAs{
+						otherName:name,
+						otherExternalUid: externalUid
+					}
+			} } 
+"""
 
 family_tree_query = '''
-	query person($xuid: string){
-	relation(func: eq(externalUid,$xuid)){
-	  externalUid,
-	  name,
-	  spouse{
-	    externalUid,
-    	name,
-    	child: ~father{
-    	  externalUid,
-          name
-	  	},
-	    child2: ~mother{
-	  	  externalUid,
-	  	  name
-		}
-  	  },
-  	  child: ~father{
-  	    externalUid,
-  	    name
-	    },
-      child2: ~mother{
-  	    externalUid,
-  	    name
-        },
-      father{
-        externalUid,
-        name,
-    spouse{
-      externalUid,
-      name
- 	},
-    grandFather: father{
-      externalUid,
-      name,
-      spouse{
-    	externalUid,
-    	name
- 	  }
-    },
-    grandMother: mother{
-      externalUid,
-      name,
-      spouse{
-    		externalUid,
-    		name
-  		}
-    }
-    
-  },
-  mother{
-    externalUid,
-    name,
-    spouse{
-    	externalUid,
-    	name
-  	},
-    grandFather: father{
-      externalUid,
-      name,
-      spouse{
-        externalUid,
-        name
-      }
-    }
-    grandMother: mother{
-      externalUid,
-      name,
-      spouse{
-        externalUid,
-        name
-      }
-    }
-  }
-}
-}
+	query relations($xuid: string){
+	relations(func: eq(externalUid,$xuid)){
+		name,
+		externalUid,
+		father{
+			name,
+			externalUid,
+			sibling: ~father{
+				name,
+				externalUid	} },
+		mother{
+			name,
+			externalUid,
+			sibling: ~mother{
+				name,
+				externalUid	} },
+		spouse{
+			name,
+			externalUid	},
+		children1:~father{
+			name,
+			externalUid },
+		children2:~mother{
+			name,
+			externalUid },
+		sameAs{
+			name,
+			externalUid,
+			father{
+				name,
+				externalUid,
+				sibling: ~father{
+					name,
+					externalUid	} },
+			mother{
+				name,
+				externalUid,
+				sibling: ~mother{
+					name,
+					externalUid	} },
+			spouse{
+				name,
+				externalUid	},
+			children1:~father{
+				name,
+				externalUid },
+			children2:~mother{
+				name,
+				externalUid } }
+	} }
 '''
 
+names_link_query = '''
+	query occurences($xuid: string, $skip:int, $limit:int){
+	occurences(func: eq(externalUid, $xuid)){
+	~nameLink(offset: $skip, first: $limit) @normalize{
+		word: word,
+		belongsTo{
+			verse:verse,
+			verseText: verseText,
+			belongsTo{
+				chapter:chapter,
+				belongsTo{
+					book: book,
+					bookNumber: bookNumber}	} } }
+	sameAs{
+		~nameLink(offset: $skip, first: $limit) @normalize{
+			word: word,
+			belongsTo{
+				verse:verse,
+				verseText: verseText,
+				belongsTo{
+					chapter:chapter,
+					belongsTo{
+						book: book,
+						bookNumber: bookNumber}	} } }
+	}
+	}	}
+'''
 
 @app.post("/names", status_code=201, tags=["WRITE", "Bible Names"])
 def add_names():
@@ -1923,3 +1974,245 @@ def add_names():
 					logging.warn("Matching word not found in the searched verse\n %s >>> %s"%(name['name'], text))
 
 	return {'msg': "Added names"}
+
+
+@app.get("/names", status_code=200, tags=["READ","Bible Names"])
+def get_names(name: str = None, externalUid: str = None, occurences: bool = False, skip:int = 0, limit: int = 10):
+	variables = {
+		"$skip": str(skip),
+		"$limit": str(limit)
+		}
+	result = []
+	try:
+		if not name and not externalUid:
+			names_query_res = graph_conn.query_data(all_names_query, variables)
+		elif externalUid:
+			variables['$xuid'] = externalUid
+			names_query_res = graph_conn.query_data(one_name_xuid_query, variables)
+		elif name:
+			variables['$name'] = name
+			names_query_res = graph_conn.query_data(name_match_query, variables)
+	except Exception as e:
+		logging.error('At fetching names')
+		logging.error(e)
+		raise HTTPException(status_code=503, detail="Graph side error. "+str(e))
+
+	if len(names_query_res['names']) == 0:
+		logging.error('At fetching names')
+		logging.error("Requested content not Available. ")
+		raise HTTPException(status_code=404, detail="Requested content not Available. ")
+	result = names_query_res['names']
+
+	for i,person in enumerate(result):
+		result[i]['link'] = '%s/names?externalUid=%s;occurences=True'%(base_URL,urllib.parse.quote(person['externalUid']))
+		result[i]['relations'] = '%s/names/relations?externalUid=%s'%(base_URL, urllib.parse.quote(person['externalUid']))
+		if "sameAs" in person:
+			for j,otherName in enumerate(person['sameAs']):
+				result[i]['sameAs'][j]['link'] = '%s/names?externalUid=%s;occurences=True'%(base_URL, urllib.parse.quote(otherName['otherExternalUid']))
+	if occurences:
+		for i, person in enumerate(result):
+			result[i]['occurences'] = []
+			try:
+				occurences_query_res = graph_conn.query_data(names_link_query,{'$xuid': person['externalUid'], "$skip": str(skip), "$limit": str(limit)})
+			except Exception as e:
+				logging.error('At fetching names occurences of %s'%person['name'])
+				logging.error(e)
+				raise HTTPException(status_code=503, detail="Graph side error. "+str(e))
+			if len(occurences_query_res['occurences']) == 0:
+				logging.warn('At fetching names occurences of %s'%person['name'])
+				logging.warn("Requested contents not available")
+			else:
+				if '~nameLink' in occurences_query_res['occurences'][0]:
+					result[i]['occurences'] = occurences_query_res['occurences'][0]['~nameLink']
+				if 'sameAs' in occurences_query_res['occurences'][0]:
+					for otherName_occurences in occurences_query_res['occurences'][0]['sameAs']:
+						result[i]['occurences'] += otherName_occurences['~nameLink']
+
+	return result
+
+
+@app.get("/names/relations", status_code=200, tags=["READ","Bible Names"])
+def get_person_relations(externalUid: str):
+	result = {}
+	try:
+		relations_query_result = graph_conn.query_data(family_tree_query,{'$xuid': externalUid})
+	except Exception as e:
+		logging.error('At fetching family relations of %s'%extrenalUid)
+		logging.error(e)
+		raise HTTPException(status_code=503, detail="Graph side error. "+str(e))
+	if len(relations_query_result['relations']) == 0:
+		logging.error('At fetching family relations of %s'%person['name'])
+		logging.error("Requested contents not available")
+		raise HTTPException(status_code=404, detail="Requested content not available")
+
+	result['person'] = {"name": relations_query_result['relations'][0]['name'],
+						"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(relations_query_result['relations'][0]['externalUid']))}
+	result['siblings'] = []
+	if "father" in relations_query_result['relations'][0]:
+		result['father'] = {"name": relations_query_result['relations'][0]['father'][0]['name'],
+							"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(relations_query_result['relations'][0]['father'][0]['externalUid'])) 
+							}
+		if 'sibling' in relations_query_result['relations'][0]['father'][0]:
+			for sibling in relations_query_result['relations'][0]['father'][0]['sibling']:
+				if sibling['externalUid'] != externalUid:
+					result['siblings'].append({"name": sibling['name'],
+												"link":"%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(sibling['externalUid']))
+												})
+	elif "sameAs" in relations_query_result['relations'][0]:
+		for otherName in relations_query_result['relations'][0]['sameAs']:
+			if 'father' in otherName:
+				if 'father' not in result:
+					result['father'] = {"name": otherName['father'][0]['name'],
+										"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(otherName['father'][0]['externalUid']))}
+				if 'sibling' in otherName['father'][0]:
+					for sibling in otherName['father'][0]['sibling']:
+						result['siblings'].append({"name": sibling['name'],
+													"link":"%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(sibling['externalUid']))
+													})
+				break
+	if "mother" in relations_query_result['relations'][0]:
+		result['mother'] = {"name": relations_query_result['relations'][0]['mother'][0]['name'],
+							"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(relations_query_result['relations'][0]['mother'][0]['externalUid'])) 
+							}
+		if 'sibling' in relations_query_result['relations'][0]['mother'][0]:
+			for sibling in relations_query_result['relations'][0]['mother'][0]['sibling']:
+				sib = {"name": sibling['name'],
+						"link":"%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(sibling['externalUid']))
+						}
+				if sibling['externalUid'] != externalUid and sib not in result['siblings']:
+					result['siblings'].append()
+	elif "sameAs" in relations_query_result['relations'][0]:
+		for otherName in relations_query_result['relations'][0]['sameAs']:
+			if 'mother' in otherName:
+				if 'mother' not in result:
+					result['mother'] = {"name": otherName['mother'][0]['name'],
+										"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(otherName['mother'][0]['externalUid']))}
+				if 'sibling' in otherName['mother'][0]:
+					for sibling in otherName['mother'][0]['sibling']:
+						sib = {"name": sibling['name'],
+								"link":"%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(sibling['externalUid']))
+								}
+						if sibling['externalUid'] != externalUid and sib not in result['siblings']:
+							result['siblings'].append({"name": sibling['name'],
+														"link":"%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(sibling['externalUid']))
+														})
+				break
+	result['spouses'] = []
+	if "spouse" in relations_query_result['relations'][0]:
+		for spouse in relations_query_result['relations'][0]['spouse']:
+			sps = {"name": spouse['name'],
+				"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(spouse['externalUid']))}
+			if sps not in result['spouses']:
+				result['spouses'].append(sps)
+	elif "sameAs" in relations_query_result['relations'][0]:
+		for otherName in relations_query_result['relations'][0]['sameAs']:
+			if "spouse" in otherName:
+				for spouse in otherName['spouse']:
+					sps = {"name": spouse['name'],
+						"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(spouse['externalUid']))}
+					if sps not in result['spouses']:
+						result['spouses'].append(sps)
+						
+	result['children'] = []
+	if "children1" in relations_query_result['relations'][0]:
+		for child in relations_query_result['relations'][0]['children1']:
+			ch = {"name": child['name'],
+					"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(child['externalUid']))}
+			if ch not in result['children']:
+				result['children'].append(ch)	
+	elif "children2" in relations_query_result['relations'][0]:
+		for child in relations_query_result['relations'][0]['children2']:
+			ch = {"name": child['name'],
+					"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(child['externalUid']))}
+			if ch not in result['children']:
+				result['children'].append(ch)	
+	elif "sameAs" in relations_query_result['relations'][0]:
+		for otherName in relations_query_result['relations'][0]['sameAs']:
+			if 'children1' in otherName:
+				for child in otherName['children1']:
+					ch = {"name": child['name'],
+							"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(child['externalUid']))}
+					if ch not in result['children']:
+						result['children'].append(ch)	
+			elif 'children2' in otherName:
+				for child in otherName['children2']:
+					ch = {"name": child['name'],
+							"link": "%s/names/relations?externalUid=%s"%(base_URL, urllib.parse.quote(child['externalUid']))}
+					if ch not in result['children']:
+						result['children'].append(ch)	
+	if len(result['spouses']) == 0:
+		del result['spouses']
+	if len(result['siblings']) == 0:
+		del result['siblings']
+	if len(result['children']) == 0:
+		del result['children']
+
+	fig = plt.figure(figsize=(12,12))
+	ax = plt.subplot(111)
+	ax.set_title('Graph - Shapes', fontsize=10)
+	G = nx.DiGraph()
+
+	G.add_node(result['person']['name'], level=3)
+	colour_list = ["blue"]
+
+	if 'father' in result:
+		G.add_node(result['father']['name'], level=4)
+		G.add_edge(result['person']['name'], result['father']['name'], label='father')
+		colour_list.append("green")
+
+	if 'mother' in result:
+		G.add_node(result['mother']['name'], level=4 )
+		G.add_edge(result['person']['name'], result['mother']['name'], label='mother')
+		colour_list.append("green")
+
+	if 'siblings' in result:
+		for sib in result['siblings']:
+			G.add_node(sib['name'], level=2)
+			G.add_edge(result['person']['name'], sib['name'], label='sibling')
+			colour_list.append("purple")
+
+	if 'spouses' in result:
+		for sps in result['spouses']:
+			G.add_node(sps['name'], level=2)
+			G.add_edge(result['person']['name'], sps['name'], label='spouse')
+			colour_list.append("pink")
+
+	if 'children' in result:
+		for child in result['children']:
+			G.add_node(child['name'], level=1)
+			G.add_edge(result['person']['name'], child['name'], label='child')
+			colour_list.append("orange")
+
+	pos = nx.multipartite_layout(G, subset_key='level', align='horizontal')
+	nx.draw(G, pos, node_size=5000, node_color=colour_list, font_size=20, font_weight='bold')
+	nx.draw_networkx_labels(G, pos)
+	nx.draw_networkx_edge_labels(G, pos)
+	plt.tight_layout()
+	plt.savefig("static/Family-tree.png")
+
+	rels_html = ""
+	for key in result:
+		if key in ['person', 'mother', 'father']:
+			rels_html += '%s:<a href="%s">%s</a><br>'%(key.upper(), result[key]['link'], result[key]['name'])
+		else:
+			items = ", ".join(['<a href="%s">%s</a>'%(it['link'], it['name']) for it in result[key]])
+			# items = ['<a href="%s">%s</a>'%(it['link'], it['name']) for it in result[key]]
+			rels_html += '%s:%s <br>'%(key.upper(), str(items))
+
+	html_file = open("Family-tree.html", "w")
+	html_content = '''
+	<html>
+	<body>
+	<div style="float:left" width="25%%">
+	%s
+	</div>
+	<div style="float:left" width="75%%">
+	<img src="/static/Family-tree.png" height="750px">
+	</div>
+	</body>
+	</html>
+	'''%rels_html
+
+	html_file.write(html_content)
+	html_file.close()
+	return FileResponse("Family-tree.html")

@@ -43,7 +43,7 @@ class dGraph_conn:
 			<referenceVerse>: [uid] @reverse .
 			<language>: string @index(exact) .
 			<title>: string @index(exact) .
-			<externalUid>: string @index(exact) .
+			<externalUid>: string @index(hash) .
 			<name>: string @index(exact) .
 			<father>: [uid] @reverse .
 			<mother>: [uid] @reverse .
