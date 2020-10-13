@@ -1,6 +1,6 @@
 import pydgraph
 import datetime
-import json
+import json, logging
 
 
 class dGraph_conn:
@@ -22,9 +22,9 @@ class dGraph_conn:
 			<StrongsNumber>: int @index(int) .
 			<position>: int @index(int) .
 			<alignsTo>: [uid] @reverse .
-			<lemma>: [uid] @reverse .
+			<strongsLink>: [uid] @reverse .
 			<twType>: string @index(exact) .
-			<tw>: uid @reverse .
+			<twLink>: uid @reverse .
 			<word>: string @index(exact) .
 			<synonym_set>: string @index(exact) .
 			<wn_lemma>: string @index(exact) .
@@ -43,18 +43,26 @@ class dGraph_conn:
 			<referenceVerse>: [uid] @reverse .
 			<language>: string @index(exact) .
 			<title>: string @index(exact) .
-
+			<externalUid>: string @index(hash) .
+			<name>: string @index(exact) .
+			<father>: [uid] @reverse .
+			<mother>: [uid] @reverse .
+			<spouse>: [uid] @reverse .
+			<sameAs>: [uid] @reverse .
+			<nameLink>: [uid] @reverse .
 		'''
 
 		self.set_schema(schema)
-		print("set set_schema")
+		logging.info("set set_schema")
 	
 
 	# Create a client stub.
 	def create_client_stub(self):
-		# self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
-		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080')
-		self.client_stub = pydgraph.DgraphClientStub('139.59.90.184:9080')
+		self.client_stub = pydgraph.DgraphClientStub('localhost:9080')
+		# self.client_stub = pydgraph.DgraphClientStub('graph.bridgeconn.com:9080') # prod server
+		# self.client_stub = pydgraph.DgraphClientStub('139.59.90.184:9080') # prod server
+		# self.client_stub = pydgraph.DgraphClientStub('128.199.18.6:9080') # new staging server
+		
 
 
 	# Create a client.
@@ -118,38 +126,20 @@ class dGraph_conn:
 			# Run mutation.
 			assigned = txn.mutate(set_obj=p)
 			
-			# mu = pydgraph.Mutation(set_json=json.dumps(p).encode('utf8'))
-			# print("half way through")
-			# assigned = txn.mutate(mu)
-
-			# mutation = txn.create_mutation(set_nquads='_:alice <name> "Alice" .')
-			# request = txn.create_request(mutations=[mutation], commit_now=True)
-			# assigned = txn.do_request(request)
-
-
 			# Commit transaction.
 			txn.commit()
 
-			# Get uid of the outermost object (person named "Alice").
-			# assigned.uids returns a map from blank node names to uids.
-			# For a json mutation, blank node names "blank-0", "blank-1", ... are used
-			# for all the created nodes.
-			# print('Created outer most node with uid = {}\n'.format(assigned.uids['blank-0']))
-
-			# print('All created nodes (map from blank node names to uids):')
-			# for uid in assigned.uids:
-				# print('created {} => {}'.format(uid, assigned.uids[uid]))
 		except Exception as e:
 			# raise e
-			print('*'*10)
-			print(e)
-			print('*'*10)
+			logging.info('*'*10)
+			logging.info(e)
+			logging.info('*'*10)
 		finally:
 			# Clean up. Calling this after txn.commit() is a no-op
 			# and hence safe.
 			txn.discard()
-			# print('\n')
-		# print("assigned:",assigned)
+
+		# get the uid of the created nodes
 		assigned = list(dict((assigned.uids)).values())
 
 		if assigned:
@@ -157,8 +147,6 @@ class dGraph_conn:
 		else:
 			return_res = None
 		return return_res
-		# print(return_res)
-		# return None
 
 
 	#Deleting a data
@@ -173,14 +161,14 @@ class dGraph_conn:
 						   uid
 						}
 					}"""
-					print("uid:",uid['uid'])
+					logging.info("uid:",uid['uid'])
 					variables1 = {'$a': uid['uid']}
 					res1 = self.client.txn(read_only=True).query(query1, variables=variables1)
 					nodes = json.loads(res1.json)
 					for node in nodes['all']:
-						print("deleting UID: " + node['uid'])
+						logging.info("deleting UID: " + node['uid'])
 						txn.mutate(del_obj=node)
-						print('deleted')
+						logging.info('deleted')
 			txn.commit()
 		finally:
 			txn.discard()
@@ -210,18 +198,33 @@ class dGraph_conn:
 			}"""
 
 			variables = {'$a': 'Alice'}
-		# print('variables:',variables)
+		# logging.info('variables:',variables)
 		try:
 			res = self.client.txn(read_only=True).query(query, variables=variables)
 		except Exception as e:
-			print('**************Error***********')
-			print('variables:',variables)
+			logging.info('**************Error***********')
+			logging.info('variables:',variables)
 			raise e
 		return json.loads(res.json)
 
-
+	def upsert(self, query=None, nquad=None, variables=None):
+		if not query :
+			query = """{
+				  u as var(func: eq(name, "Alice"))
+				}"""
+		if not nquad:
+			nquad = """
+				  uid(u) <name> "Alice" .
+				  uid(u) <age> "25" .
+				"""
+		txn = self.client.txn()
+		mutation = txn.create_mutation(set_nquads=nquad)
+		request = txn.create_request(query=query, mutations=[mutation], commit_now=True)
+		txn.do_request(request) 
+		return
 
 if __name__ == '__main__':
 	conn = dGraph_conn()
-	conn.delete_data(["0x3459","0x345a","0x345b","0x345c","0x345d","0x345e","0x345f"])
+	logging.info("connection ok")
+	# conn.delete_data(["0x3459","0x345a","0x345b","0x345c","0x345d","0x345e","0x345f"])
 
