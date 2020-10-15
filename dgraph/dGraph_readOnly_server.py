@@ -416,6 +416,7 @@ class WordOut(BaseModel):
 class VerseOut(BaseModel):
 	verseNumber: int
 	verseText: str
+	verseLink: AnyUrl
 	words: List[WordOut] = None
 
 class ChapterOut(BaseModel):
@@ -572,6 +573,8 @@ def get_whole_chapter(bibleName: str, bookCode: BibleBook, chapter: int, detaile
 		logging.error('At parsing chapter contents')
 		logging.error(e)
 		raise NotAvailableException("Whole Chapter: "+str(variables))
+	for j,ver in enumerate(result['verses']):
+		result['verses'][j]['verseLink'] = "%s/bibles/%s/books/%s/chapters/%s/verses/%s?detailed=True"%(base_URL, urllib.parse.quote(bibleName), bookCode.value, chapter, ver['verseNumber'])	
 	if detailed:
 		for j,ver in enumerate(result['verses']):
 			for i,wrd in enumerate(ver['words']):
@@ -658,16 +661,16 @@ one_verse_detailed_query = '''
 '''
 
 
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
-def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int, detailed: bool = False):
+@app.get('/bibles/{bibleName}/books/{bookCode}/chapters/{chapter}/verses/{verse}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
+def get_one_verse(bibleName: str, bookCode: BibleBook, chapter: int, verse: int, detailed: bool = False):
 	''' fetches one verse.
 	* detailed flag can be used to include individual words list and their strong number, tw and bible name connections
 	'''
 	if not graph_conn:
 		test()
 	try:
-		variables = {'$bib': bible_name,
-					'$book': str(book_num_map[bookcode]),
+		variables = {'$bib': bibleName,
+					'$book': str(book_num_map[bookCode]),
 					'$chapter': str(chapter),
 					'$verse': str(verse)}
 		if detailed:
@@ -688,6 +691,8 @@ def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int
 		logging.error('At parsing verse contents')
 		logging.error(e)
 		raise NotAvailableException("One verse: "+str(variables))
+	result['verseLink'] = "%s/bibles/%s/books/%s/chapters/%s/verses/%s?detailed=True"%(base_URL, urllib.parse.quote(bibleName), bookCode.value, chapter, result['verseNumber'])	
+
 	if detailed:
 		for i,wrd in enumerate(result['words']):
 			if 'translationWord' in wrd:
@@ -704,12 +709,61 @@ def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int
 					result['words'][i]['nameLink'] = "%s/names?externalUid=%s"%(base_URL, urllib.parse.quote(wrd['externalUid']))
 	return result
 
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
+word_query = '''
+	query words($bib: string, $book: int, $chapter: int, $verse: int, $pos: int){
+	words(func: eq(bible, $bib)) {
+		bible
+		~belongsTo @filter(eq(bookNumber, $book)){
+		book,
+		~belongsTo @filter(eq(chapter, $chapter)){
+		chapter
+		~belongsTo @filter(eq(verse, $verse)){
+			~belongsTo @filter(eq(position, $pos))@normalize{
+				word:word,
+				uid,
+				position: position,
+				twLink: twLink {
+					translationWord: translationWord,
+				},
+				strongsLink {
+					strongsNumber: StrongsNumber,
+				},
+				nameLink{
+					name: name,
+					externalUid: externalUid
+				},
+				alignsTo: alignsTo {
+					twLink: twLink {
+						translationWord: translationWord,
+					}
+					strongsLink {
+						strongsNumber: StrongsNumber,
+					}
+					~alignsTo{
+						nameLink{
+							name: name,
+							externalUid: externalUid
+						}
+
+					}
+				}
+
+			}
+		}
+		}
+		}
+	}
+	}
+'''
+
+
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}', response_model=WordOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
 def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: int, position: int):
 	''' fetches all details of a bible word 
 	including their strong number, tw and bible name connections
 	'''
-	result = {}
+	if not graph_conn:
+		test()
 	try:
 		variables = {'$bib': bible_name,
 					'$book': str(book_num_map[bookcode]),
@@ -721,20 +775,23 @@ def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: in
 	except Exception as e:
 		logging.error('At fetching chapter contents')
 		logging.error(e)
-		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		if "details" in dir(e):
+			details = e.details()
+		else:
+			details = str(e)
+		raise GraphException(details)
 	try:
-		result = query_res['word'][0]['~belongsTo'][0]['~belongsTo'][0]['~belongsTo'][0]
-		for i,wrd in enumerate(result['words']):
-			if 'translationWord' in wrd:
-				link = '%s/translationwords?translation_word=%s'%(base_URL, wrd['translationWord'])
-				result['words'][i]['translationWordLink'] = urllib.parse.quote(link, safe='/:?=')
-			if 'strongsNumber' in wrd:
-				link = '%s/strongs?strongs_number=%s'%(base_URL, wrd['strongsNumber'])
-				result['words'][i]['strongsLink'] = urllib.parse.quote(link, safe='/:?=')
+		result = query_res['words'][0]['~belongsTo'][0]['~belongsTo'][0]['~belongsTo'][0]['~belongsTo'][0]
+		if 'translationWord' in result:
+			link = '%s/translationwords?translation_word=%s'%(base_URL, result['translationWord'])
+			result['translationWordLink'] = urllib.parse.quote(link, safe='/:?=')
+		if 'strongsNumber' in result:
+			link = '%s/strongs?strongs_number=%s'%(base_URL, result['strongsNumber'])
+			result['strongsLink'] = urllib.parse.quote(link, safe='/:?=')
 	except Exception as e:
 		logging.error('At parsing verse contents')
 		logging.error(e)
-		raise HTTPException(status_code=404, detail="Requested content not Available. ")
+		raise NotAvailableException("Bible word: "+str(variables))
 	return result
 
 
