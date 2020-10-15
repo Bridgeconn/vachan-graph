@@ -409,7 +409,7 @@ class WordOut(BaseModel):
 	strongsNumber: int = None
 	translationWord: str = None
 	name: str = None
-	strongsNumberLink: AnyUrl = None
+	strongsLink: AnyUrl = None
 	translationWordLink: AnyUrl = None
 	nameLink: AnyUrl = None
 
