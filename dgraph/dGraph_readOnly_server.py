@@ -200,7 +200,7 @@ class StrongsOut(BaseModel):
 	englishWord: str
 	occurences: List[wordReference] = None
 
-@app.get("/strongs", response_model=List[StrongsOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Dictionaries"])
+@app.get("/strongs", response_model=List[StrongsOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Dictionaries"])
 def get_strongs(strongs_number:int=None, skip: int =0, limit: int=DEFAULT_RETURN_LIMIT):
 	''' Get the list of strongs nodes and their property values.
 	* If strongs_number is sepcified, only its properties are returned, along with occurences .
@@ -286,7 +286,7 @@ class twOut(BaseModel):
 	description: str
 	occurences: List[wordReference]
 
-@app.get("/translation-words", response_model=List[twOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Dictionaries"])
+@app.get("/translation-words", response_model=List[twOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Dictionaries"])
 def get_translationwords(translationWord:str=None, skip: int =0, limit: int=DEFAULT_RETURN_LIMIT):
 	'''Get the list of translation words and their property values.
 	* If tw is sepcified, only its properties are returned, along with occurences .
@@ -432,7 +432,7 @@ class BibleContentOut(BaseModel):
 	books : List[BibleBookOut]
 
 
-@app.get('/bibles', response_model=List[BibleOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Bible Contents"])
+@app.get('/bibles', response_model=List[BibleOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
 def get_bibles(bibleName : str = None, language: str = None, versification: bool = False, skip: int = 0, limit: int = DEFAULT_RETURN_LIMIT):
 	''' fetches bibles nodes, properties and available books. 
 	* If no query params are given, all bibles in graph are fetched.
@@ -542,7 +542,7 @@ whole_chapter_detailed_query = '''
 	}
 '''
 
-@app.get('/bibles/{bibleName}/books/{bookCode}/chapters/{chapter}', response_model=ChapterOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Bible Contents"])
+@app.get('/bibles/{bibleName}/books/{bookCode}/chapters/{chapter}', response_model=ChapterOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
 def get_whole_chapter(bibleName: str, bookCode: BibleBook, chapter: int, detailed: bool = False):
 	''' fetches all verses of the chapter 
 	* if detailed flag if set, the individual words in verses, including their strong number, tw and bible name connections are returned
@@ -658,7 +658,7 @@ one_verse_detailed_query = '''
 '''
 
 
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Bible Contents"])
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
 def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int, detailed: bool = False):
 	''' fetches one verse.
 	* detailed flag can be used to include individual words list and their strong number, tw and bible name connections
@@ -704,7 +704,7 @@ def get_one_verse(bible_name: str, bookcode: BibleBook, chapter: int, verse: int
 					result['words'][i]['nameLink'] = "%s/names?externalUid=%s"%(base_URL, urllib.parse.quote(wrd['externalUid']))
 	return result
 
-@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Bible Contents"])
+@app.get('/bibles/{bible_name}/books/{bookcode}/chapters/{chapter}/verses/{verse}/words/{position}', response_model=VerseOut, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Bible Contents"])
 def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: int, position: int):
 	''' fetches all details of a bible word 
 	including their strong number, tw and bible name connections
@@ -900,7 +900,7 @@ class NameOut(BaseModel):
 	externalUid: str
 	occurences: List[wordReference] = None
 
-@app.get('/names', response_model=List[NameOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Dictionaries"])
+@app.get('/names', response_model=List[NameOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Dictionaries"])
 def get_names(name: str = None, externalUid: str = None, occurences: bool = False, skip:int = 0, limit: int = 10):
 	''' Fetched the list of Bible Names in Graph
 	* name or externalUid can be used to obtaine specific names and details
@@ -971,7 +971,7 @@ def get_names(name: str = None, externalUid: str = None, occurences: bool = Fals
 	return result
 
 
-@app.get("/names/relations", response_class=FileResponse, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, status_code=200, tags=["Extras"])
+@app.get("/names/relations", response_class=FileResponse, responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Extras"])
 def get_person_relations(externalUid: str):
 	if not graph_conn:
 		test()
