@@ -198,6 +198,7 @@ class StrongsOut(BaseModel):
 	definition: str
 	strongsNumberExtended: str
 	englishWord: str
+	strongsLink: AnyUrl
 	occurences: List[wordReference] = None
 
 @app.get("/strongs", response_model=List[StrongsOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Dictionaries"])
@@ -284,7 +285,8 @@ class twOut(BaseModel):
 	slNo: int
 	twType: str
 	description: str
-	occurences: List[wordReference]
+	translationWordLink: AnyUrl
+	occurences: List[wordReference] = None
 
 @app.get("/translation-words", response_model=List[twOut], responses = {502:{"model":ErrorResponse}, 404:{"model": ErrorResponse}, 422:{"model": ErrorResponse}}, response_model_exclude_unset=True, status_code=200, tags=["Dictionaries"])
 def get_translationwords(translationWord:str=None, skip: int =0, limit: int=DEFAULT_RETURN_LIMIT):
@@ -323,7 +325,7 @@ def get_translationwords(translationWord:str=None, skip: int =0, limit: int=DEFA
 				query_res['tw'][i]['occurences'][j]['book'] = num_book_map[occur['book']]
 		if 'translationWord' in tw:
 			tw_link = '%s/translation-words?translationWord=%s'%(base_URL, tw['translationWord'])
-			query_res['tw'][i]['twLink'] = urllib.parse.quote(tw_link, safe='/:?=')
+			query_res['tw'][i]['translationWordLink'] = urllib.parse.quote(tw_link, safe='/:?=')
 	result = query_res['tw']
 	return result
 
