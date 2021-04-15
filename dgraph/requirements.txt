@@ -3,7 +3,7 @@ argon2-cffi==20.1.0
 async-generator==1.10
 attrs==20.2.0
 backcall==0.2.0
-bleach==3.2.1
+bleach==3.3.0
 certifi==2020.6.20
 cffi==1.14.3
 click==7.1.2
@@ -19,7 +19,7 @@ ipykernel==5.3.4
 ipython==7.18.1
 ipython-genutils==0.2.0
 jedi==0.17.2
-Jinja2==2.11.2
+Jinja2==2.11.3
 jsonschema==3.2.0
 jupyter-client==6.1.7
 jupyter-core==4.6.3
@@ -33,14 +33,14 @@ nbconvert==6.0.7
 nbformat==5.0.7
 nest-asyncio==1.4.1
 networkx==2.5
-notebook==6.1.4
+notebook==6.1.5
 numpy==1.19.2
 packaging==20.4
 pandocfilters==1.4.2
 parso==0.7.1
 pexpect==4.8.0
 pickleshare==0.7.5
-Pillow==7.2.0
+Pillow==8.1.1
 pkg-resources==0.0.0
 prometheus-client==0.8.0
 prompt-toolkit==3.0.7
@@ -49,7 +49,7 @@ ptyprocess==0.6.0
 pycparser==2.20
 pydantic==1.6.1
 pydgraph==20.7.0
-Pygments==2.7.1
+Pygments==2.7.4
 PyMySQL==0.10.1
 pyparsing==2.4.7
 pyrsistent==0.17.3
