@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Query, Path, Body, HTTPException
+from fastapi import FastAPI, Query, Path, Body, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import subprocess
+import unicodedata
 import pymysql
 from dGraph_conn import dGraph_conn
 import logging, csv, urllib, json, itertools, re
@@ -24,7 +26,8 @@ base_URL = 'http://localhost:7000'
 non_letters = [',', '"', '!', '.', '\n', '\\','“','”','“','*','।','?',';',"'","’","(",")","‘","—"]
 non_letter_pattern = re.compile(r'['+''.join(non_letters)+']')
 
-book_num_map = { "mat": 40 ,"mrk": 41 ,"luk": 42 ,"jhn": 43 ,"act": 44 ,"rom": 45 ,"1co": 46 ,"2co": 47 ,"gal": 48 ,"eph": 49 ,"php": 50 ,"col": 51 ,"1th": 52 ,"2th": 53 ,"1ti": 54 ,"2ti": 55 ,"tit": 56 ,"phm": 57 ,"heb": 58 ,"jas": 59 ,"1pe": 60 ,"2pe": 61 ,"1jn": 62 ,"2jn": 63 ,"3jn": 64 ,"jud": 65 ,"rev": 66, "Genesis": 1, "GEN": 1, "Exodus": 2, "EXO": 2, "Leviticus": 3, "LEV": 3, "Numbers": 4, "NUM": 4, "Deuteronomy": 5, "DEU": 5, "Joshua": 6, "JOS": 6, "Judges": 7, "JDG": 7, "Ruth": 8, "RUT": 8, "1 Samuel": 9, "1SA": 9, "2 Samuel": 10, "2SA": 10, "1 Kings": 11, "1KI": 11, "2 Kings": 12, "2KI": 12, "1 Chronicles": 13, "1CH": 13, "2 Chronicles": 14, "2CH": 14, "Ezra": 15, "EZR": 15, "Nehemiah": 16, "NEH": 16, "Esther": 17, "EST": 17, "Job": 18, "JOB": 18, "Psalms": 19, "PSA": 19, "Proverbs": 20, "PRO": 20, "Ecclesiastes": 21, "ECC": 21, "Song of Solomon": 22, "SNG": 22, "Isaiah": 23, "ISA": 23, "Jeremiah": 24, "JER": 24, "Lamentations": 25, "LAM": 25, "Ezekiel": 26, "EZK": 26, "Daniel": 27, "DAN": 27, "Hosea": 28, "HOS": 28, "Joel": 29, "JOL": 29, "Amos": 30, "AMO": 30, "Obadiah": 31, "OBA": 31, "Jonah": 32, "JON": 32, "Micah": 33, "MIC": 33, "Nahum": 34, "NAM": 34, "Habakkuk": 35, "HAB": 35, "Zephaniah": 36, "ZEP": 36, "Haggai": 37, "HAG": 37, "Zechariah": 38, "ZEC": 38, "Malachi": 39, "MAL": 39, "Matthew": 40, "MAT": 40, "Mark": 41, "MRK": 41, "Luke": 42, "LUK": 42, "John": 43, "JHN": 43, "Acts": 44, "ACT": 44, "Romans": 45, "ROM": 45, "1 Corinthians": 46, "1CO": 46, "2 Corinthians": 47, "2CO": 47, "Galatians": 48, "GAL": 48, "Ephesians": 49, "EPH": 49, "Philippians": 50, "PHP": 50, "Colossians": 51, "COL": 51, "1 Thessalonians": 52, "1TH": 52, "2 Thessalonians": 53, "2TH": 53, "1 Timothy": 54, "1TI": 54, "2 Timothy": 55, "2TI": 55, "Titus": 56, "TIT": 56, "Philemon": 57, "PHM": 57, "Hebrews": 58, "HEB": 58, "James": 59, "JAS": 59, "1 Peter": 60, "1PE": 60, "2 Peter": 61, "2PE": 61, "1 John": 62, "1JN": 62, "2 John": 63, "2JN": 63, "3 John": 64, "3JN": 64, "Jude": 65, "JUD": 65, "Revelation": 66, "REV": 66, "Psalm": 19, "PSA": 19}
+book_num_map = { "mat": 40 ,"mrk": 41 ,"luk": 42 ,"jhn": 43 ,"act": 44 ,"rom": 45 ,"1co": 46 ,"2co": 47 ,"gal": 48 ,"eph": 49 ,"php": 50 ,"col": 51 ,"1th": 52 ,"2th": 53 ,"1ti": 54 ,"2ti": 55 ,"tit": 56 ,"phm": 57 ,"heb": 58 ,"jas": 59 ,"1pe": 60 ,"2pe": 61 ,"1jn": 62 ,"2jn": 63 ,"3jn": 64 ,"jud": 65 ,"rev": 66, "Genesis": 1, "GEN": 1, "Exodus": 2, "EXO": 2, "Leviticus": 3, "LEV": 3, "Numbers": 4, "NUM": 4, "Deuteronomy": 5, "DEU": 5, "Joshua": 6, "JOS": 6, "Judges": 7, "JDG": 7, "Ruth": 8, "RUT": 8, "1 Samuel": 9, "1SA": 9, "2 Samuel": 10, "2SA": 10, "1 Kings": 11, "1KI": 11, "2 Kings": 12, "2KI": 12, "1 Chronicles": 13, "1CH": 13, "2 Chronicles": 14, "2CH": 14, "Ezra": 15, "EZR": 15, "Nehemiah": 16, "NEH": 16, "Esther": 17, "EST": 17, "Job": 18, "JOB": 18, "Psalms": 19, "PSA": 19, "Proverbs": 20, "PRO": 20, "Ecclesiastes": 21, "ECC": 21, "Song of Solomon": 22, "SNG": 22, "Isaiah": 23, "ISA": 23, "Jeremiah": 24, "JER": 24, "Lamentations": 25, "LAM": 25, "Ezekiel": 26, "EZK": 26, "Daniel": 27, "DAN": 27, "Hosea": 28, "HOS": 28, "Joel": 29, "JOL": 29, "Amos": 30, "AMO": 30, "Obadiah": 31, "OBA": 31, "Jonah": 32, "JON": 32, "Micah": 33, "MIC": 33, "Nahum": 34, "NAM": 34, "Habakkuk": 35, "HAB": 35, "Zephaniah": 36, "ZEP": 36, "Haggai": 37, "HAG": 37, "Zechariah": 38, "ZEC": 38, "Malachi": 39, "MAL": 39, "Matthew": 40, "MAT": 40, "Mark": 41, "MRK": 41, "Luke": 42, "LUK": 42, "John": 43, "JHN": 43, "Acts": 44, "ACT": 44, "Romans": 45, "ROM": 45, "1 Corinthians": 46, "1CO": 46, "2 Corinthians": 47, "2CO": 47, "Galatians": 48, "GAL": 48, "Ephesians": 49, "EPH": 49, "Philippians": 50, "PHP": 50, "Colossians": 51, "COL": 51, "1 Thessalonians": 52, "1TH": 52, "2 Thessalonians": 53, "2TH": 53, "1 Timothy": 54, "1TI": 54, "2 Timothy": 55, "2TI": 55, "Titus": 56, "TIT": 56, "Philemon": 57, "PHM": 57, "Hebrews": 58, "HEB": 58, "James": 59, "JAS": 59, "1 Peter": 60, "1PE": 60, "2 Peter": 61, "2PE": 61, "1 John": 62, "1JN": 62, "2 John": 63, "2JN": 63, "3 John": 64, "3JN": 64, "Jude": 65, "JUD": 65, "Revelation": 66, "REV": 66, "Psalm": 19, "PSA": 19,
+"GEN": 1,	"EXO": 2,	"LEV": 3,	"NUM": 4,	"DEU": 5,	"JOS": 6,	"JDG": 7,	"RUT": 8,	"1SA": 9,	"2SA": 10,	"1KI": 11,	"2KI": 12,	"1CH": 13,	"2CH": 14,	"EZR": 15,	"NEH": 16,	"EST": 17,	"JOB": 18,	"PSA": 19,	"PRO": 20,	"ECC": 21,	"SNG": 22,	"ISA": 23,	"JER": 24,	"LAM": 25,	"EZK": 26,	"DAN": 27,	"HOS": 28,	"JOL": 29,	"AMO": 30,	"OBA": 31,	"JON": 32,	"MIC": 33,	"NAM": 34,	"HAB": 35,	"ZEP": 36,	"HAG": 37,	"ZEC": 38,	"MAL": 39}
 
 num_book_map = {}
 for key in book_num_map:
@@ -332,16 +335,16 @@ tw_link_query = '''
 		description,
 		occurances: ~twLink @normalize {
 			~alignsTo {
-	        position:position,
-	        word:word,
+			position:position,
+			word:word,
 			belongsTo{
 				verse: verse,
-		        belongsTo{
-		            chapter:chapter,
-		            belongsTo{
-		              book:bookNumber,
-		              belongsTo {
-		               bible:bible 
+				belongsTo{
+					chapter:chapter,
+					belongsTo{
+					  book:bookNumber,
+					  belongsTo {
+					   bible:bible 
 	}	}	}	}	} }	} }
 '''
 
@@ -668,9 +671,190 @@ def edit_bible(bible_name: str, key_values: List[BiblePropertyValue]):
 		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 	raise HTTPException(status_code=503, detail="Not implemented properly. ")
 
+def normalize_unicode(text, form="NFKC"):
+    '''to normalize text contents before adding them to DB'''
+    return unicodedata.normalize(form, text)
+
+def parse_usfm(usfm_string):
+    '''converts an uploaded usfm text to a JSON using usfm-grammar'''
+    if isinstance(usfm_string, bytes):
+    	usfm_string = usfm_string.decode('UTF-8')
+    file= open("temp.usfm", "w")
+    file.write(usfm_string)
+    file.close()
+    process = subprocess.Popen(['/usr/bin/usfm-grammar temp.usfm --level=relaxed --filter=scripture'],
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE,
+                         shell=True)
+    stdout, stderr = process.communicate()
+    if stderr:
+        raise Exception(stderr.decode('utf-8'))
+    usfm_json = json.loads(stdout.decode('utf-8'))
+    return usfm_json
+
+punct_pattern = re.compile('['+"".join([',', '"', '!', '.', ':', ';', '\n', '\\','“','”',
+        '“','*','।','?',';',"'","’","(",")","‘","—"])+']')
+
+@app.post('/bibles/usfm', status_code = 200, tags=["WRITE", "Bible Contents"])
+def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("Hindi"), version: str = Body('IRV4'), usfm_file: UploadFile = File(...)):
+	'''Processes the usfm and adds contents to corresponding bible(creates new bible if not present already)'''
+	usfm = usfm_file.file.read()
+	# print(usfm)
+	connect_Graph()
+	try:
+		bibNode_query_res = graph_conn.query_data(bible_uid_query,{'$bib':bible_name})
+	except Exception as e:
+		logging.error('At fetching Bible uid')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+
+	if len(bibNode_query_res['bible']) == 0:
+		# create a bible nodename
+		bib_node = { 'bible': bible_name,
+			'language' : language,
+			'version': str(version)
+				}
+		try:
+			bib_node_uid = graph_conn.create_data(bib_node)
+			logging.info('bib_node_uid: %s' %bib_node_uid)
+		except Exception as e:
+			logging.error('At creating Bible node')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	elif len(bibNode_query_res['bible']) > 1:
+		logging.error('At fetching Bible uid')
+		logging.error( 'matched multiple bible nodes')
+		raise HTTPException(status_code=500, detail="Graph side error. "+' matched multiple bible nodes')
+	else:
+		bib_node_uid = bibNode_query_res['bible'][0]['uid']	
+
+	book_json = parse_usfm(usfm)
+	book_code = book_json['book']['bookCode'].upper()
+	book_num = book_num_map[book_code.upper()]
+
+	# to find/create book node
+	variables = {
+		'$bib': bib_node_uid,
+		'$book': book_code
+	}
+	try:
+		bookNode_query_res = graph_conn.query_data(bookNode_query,variables)
+	except Exception as e:
+		logging.error('At fetching book node')
+		logging.error(e)
+		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	if len(bookNode_query_res['book']) == 0:
+		bookNode = {
+			'book' : book_code,
+			'bookNumber': book_num,
+			'belongsTo' : {
+				'uid': bib_node_uid 
+			}
+		}
+		try:
+			bookNode_uid = graph_conn.create_data(bookNode)
+		except Exception as e:
+			logging.error('At creating book node')
+			logging.error(e)
+			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+	elif len(bookNode_query_res['book']) > 1:
+		logging.error('At fetching book node')
+		logging.error("Matched multiple book nodes")
+		raise HTTPException(status_code=500, detail="Graph side error. Matched multiple book nodes")
+	else:
+		bookNode_uid = bookNode_query_res['book'][0]['uid']
+
+	for chapter in book_json['chapters']:
+		chapter_num = chapter['chapterNumber']
+		# to find/create chapter node
+		variables = {
+			'$book': bookNode_uid,
+			'$chap': str(chapter_num)
+		}
+		try:
+			chapNode_query_res = graph_conn.query_data(chapNode_query,variables)
+		except Exception as e:
+			logging.error('At fetching chapter node')
+			logging.error(e)
+			raise HTTPException(status_code=500, detail="Graph side error. "+ str(e))
+
+		if len(chapNode_query_res['chapter']) == 0:
+			chapNode = {
+				'chapter' : chapter_num,
+				'belongsTo' : {
+					'uid': bookNode_uid 
+				}
+			}
+			try:
+				chapNode_uid = graph_conn.create_data(chapNode)
+			except Exception as e:
+				logging.error('At creating chapter node')
+				logging.error(e)
+				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+		elif len(chapNode_query_res['chapter']) > 1:
+			logging.error('At fetching chapter node')
+			logging.error("Matched multiple chapter nodes")
+			raise HTTPException(status_code=500, detail="Graph side error. Matched multiple chapter nodes")
+		else:
+			chapNode_uid = chapNode_query_res['chapter'][0]['uid']
+
+		for content in chapter['contents']:
+			if "verseNumber" in content:
+				verse_num = content['verseNumber']
+				verse_text = content['verseText']
+				# to find/create verse node
+				variables = {
+					'$chapter': chapNode_uid,
+					'$verse': str(verse_num)
+				}
+				try:
+					verseNode_query_res = graph_conn.query_data(verseNode_query,variables)
+				except Exception as e:
+					logging.error('At fetching verse node')
+					logging.error(e)
+					raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+				if len(verseNode_query_res['verse']) == 0:
+					verseNode = {
+						'verse' : verse_num,
+						'verseText': verse_text,
+						'belongsTo' : {
+							'uid': chapNode_uid 
+						}
+					}
+					try:
+						verseNode_uid = graph_conn.create_data(verseNode)
+					except Exception as e:
+						logging.error('At creating verse node')
+						logging.error(e)
+						raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+				elif len(verseNode_query_res['verse']) > 1:
+						logging.error('At creating chapter node')
+						logging.error("Matched multiple verse nodes")
+						raise HTTPException(status_code=500, detail="Graph side error. Matched multiple verse nodes")
+				else:
+					verseNode_uid = verseNode_query_res['verse'][0]['uid']				
+				clean_text = re.sub(punct_pattern, ' ',verse_text)
+				words = re.split(r'\s+', clean_text)
+				for i, word in enumerate(words):
+					# to create a word node
+					wordNode = {
+							'word' : word,
+							'belongsTo' : {
+								'uid': verseNode_uid 
+							},
+							'position': i,
+						}
+					try:
+						wordNode_uid = graph_conn.create_data(wordNode)
+					except Exception as e:
+						logging.error('At creating word node')
+						logging.error(e)
+						raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
+					logging.info('wordNode_uid:%s'%wordNode_uid)
+	return {"message":"usfm added"}
 
 @app.post('/bibles', status_code = 200, tags=["WRITE", "Bible Contents"])
-def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("Hindi"), version: str = Body('IRV4'), tablename: str = Body('Hin_IRV4_BibleWord'), bookcode: BibleBook = Body('mat')):
+def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("Hindi"), version: str = Body('IRV4'), tablename: str = Body('Hin_IRV4_BibleWord'), bookcode: BibleBook = Body(BibleBook.mat)):
 	''' create a bible node, fetches contents from specified table in MySQL DB and adds to Graph.
 	Currently the API is implemented to add only one book at a time. 
 	This is due to the amount of time required.'''
@@ -1324,7 +1508,7 @@ def get_verse_word(bible_name: str, bookcode: BibleBook, chapter: int, verse: in
 dict_node_query  = """
 				query dict($dict: string){
 				  dict(func: eq(dictionary, $dict)){
-				  	uid
+					uid
 				} }"""
 
 name_X_uid_query = """
@@ -1527,7 +1711,7 @@ def add_names():
 		 "externalUid": external_uid,
 		 "name": label,
 		 "belongsTo": {
-		 	"uid": dict_node_uid
+			"uid": dict_node_uid
 		 }
 		}
 		if "PersonDescription" in name:
@@ -1559,7 +1743,7 @@ def add_names():
 		 "externalUid": external_uid,
 		 "name": label,
 		 "belongsTo": {
-		 	"uid": dict_node_uid
+			"uid": dict_node_uid
 		 }
 		}
 		if "description" in name:
@@ -1587,7 +1771,7 @@ def add_names():
 		 "externalUid": external_uid,
 		 "name": label,
 		 "belongsTo": {
-		 	"uid": dict_node_uid
+			"uid": dict_node_uid
 		 }
 		}
 		if "itemDescription" in name:
@@ -2216,3 +2400,333 @@ def get_person_relations(externalUid: str):
 	html_file.write(html_content)
 	html_file.close()
 	return FileResponse("Family-tree.html")
+
+
+
+#################### VERSIFICATION #########################
+
+@app.post("/versification/original", status_code=201, tags=["WRITE", "Versification"])
+def add_versification_orig(versification: dict):
+	'''Create the entire versification structure with the original versification format'''
+	nodename = "original"
+	root_node = {"versification": nodename}
+	root_node_uid = graph_conn.create_data(root_node)
+	for book in versification['maxVerses']:
+		book_node = {"bookcode": book, "belongsTo":{"uid":root_node_uid}}
+		book_node_uid = graph_conn.create_data(book_node)
+		for i,chap_max in enumerate(versification['maxVerses'][book]):
+			chapter_node = {"chapter":i+1, "belongsTo":{"uid":book_node_uid}}
+			chapter_node_uid = graph_conn.create_data(chapter_node)
+			for verse in range(int(chap_max)):
+				verse_node = {"verseNumber":verse+1, "belongsTo":{"uid":chapter_node_uid}}
+				verse_node_uid = graph_conn.create_data(verse_node)
+
+
+versi_verse_node_query = '''query verse($book: string, $chapter:int, $verse:int){
+	verse(func: eq(versification, "original")) @normalize{
+		versification,
+		~belongsTo @filter(eq(bookcode, $book)){
+			bookcode,
+			~belongsTo @filter(eq(chapter, $chapter)){
+				chapter,
+				~belongsTo @filter(eq(verseNumber, $verse)){
+					uid:uid
+				}
+			}
+		}
+	}	
+}
+'''
+
+bible_verse_node_query = '''query verse($bib_uid: string, $book: int, $chapter:int, $verse:int){
+	verse(func: uid($bib_uid)) @normalize{
+		bible,
+		~belongsTo @filter(eq(bookNumber, $book)){
+			book,
+			~belongsTo @filter(eq(chapter, $chapter)){
+				chapter,
+				~belongsTo @filter(eq(verse, $verse)){
+					uid:uid
+				}
+			}
+		}
+	}	
+}
+
+'''
+
+# partial verses are not matched by these patterns as the code processing mappedVerses also cannot handle them
+# single_verse_pattern = re.compile(r'([\w\d]\w\w) (\d+):(\d+\w*)$')
+verse_range_pattern = re.compile(r'([\w\d]\w\w) (\d+):(\d+\w*)\-?(\d+\w*)?$')
+
+def versi_map_nodes(var1, var2):
+	if re.match(r'[\w\d]\w\w', var1['$book']):
+		var1['$book'] = str(book_num_map[var1['$book']])
+	source_node = graph_conn.query_data(bible_verse_node_query, var1)
+	if len(source_node['verse']) < 1:
+		raise Exception("Cant find node:%s", var1)
+	versi_node = graph_conn.query_data(versi_verse_node_query, var2)
+	if len(versi_node['verse']) < 1:
+		raise Exception("Cant find versification node: %s", var2)
+	mapping = {"uid": source_node['verse'][0]['uid'],
+				"verseMapping": {"uid":versi_node['verse'][-1]['uid']}}
+	print(mapping)
+	graph_conn.create_data(mapping)
+	return True
+	
+def to_int(num):
+	match_obj = re.match(r'\d+', num)
+	return int(match_obj.group(0))
+
+def process_ref_string(ref_str):
+	# print(ref_str,"-->")
+	verse_list = []
+	match_obj = re.match(verse_range_pattern, ref_str)
+	if match_obj:
+		book = match_obj.group(1)
+		chapter = match_obj.group(2)
+		verse_s = match_obj.group(3)
+		verse_e = match_obj.group(4)
+		if verse_e is None or verse_e == "":
+			verse_list = [{"$book":book, "$chapter":chapter, "$verse":str(to_int(verse_s))}]
+		else:
+			for v in range(to_int(verse_s), to_int(verse_e)+1):
+				var = {"$book":book, "$chapter":chapter, "$verse":str(v)}
+				verse_list.append(var)
+	else:
+		raise Exception("Reference, %s, cannot be parsed"% ref_str)
+	# print(verse_list)
+	return verse_list
+
+@app.post("/versification/map", status_code=201, tags=["WRITE", "Versification"])
+def add_versification_map(versification:dict, bible_name:str):
+	'''Add maps from verses of selected bible to the original versification structure as per the map'''
+	connect_Graph()
+	bib_res = graph_conn.query_data(bible_uid_query, {"$bib":bible_name})
+	if len(bib_res['bible']) < 1:
+		raise HTTPException("Bible not found:%s", bible_name)
+	bib_uid = bib_res['bible'][0]['uid']
+	for source_verse in versification['verseMappings']:
+		versi_verse = versification['verseMappings'][source_verse]
+		src_vars = process_ref_string(source_verse)
+		versi_vars = process_ref_string(versi_verse)
+		for item in src_vars:
+			item["$bib_uid"] = str(bib_uid)
+		# if two refs have same number of verses, maps one-to-one
+		# if different number of verses, then all extra verses in the longer range is mapped to the last verse of shorter one
+		i = 0
+		for var1 in src_vars:
+			var2 = versi_vars[i]
+			if i < len(versi_vars)-1:
+				i = i+1
+			versi_map_nodes(var1, var2)
+		var1 = src_vars[-1]
+		while i < len(versi_vars)-1:
+			var2 = versi_vars[i]
+			versi_map_nodes(var1, var2)
+			i += 1
+
+	for verse in versification['excludedVerses']:
+		verse_vars = process_ref_string(verse)
+		for var in verse_vars:
+			versi_node = graph_conn.query_data(versi_verse_node_query, var)
+			if len(versi_node['verse']) < 1:
+				raise Exception("Cant find versification node: %s", var)
+			mapping = {"uid": str(bib_uid),
+						"excludedVerse": {"uid":versi_node['verse'][0]['uid']}}
+			print(mapping)
+			graph_conn.create_data(mapping)
+
+	for verse in versification["partialVerses"]:
+		'''if component verses are coming as muiltiple verse nodes in Graph, 
+		add a "partialVerse" relation from root verse to components'''
+		pass
+
+exluded_verses_query = '''query verses($bib_uid: string){
+	verse(func: uid($bib_uid)) @normalize{
+		bible,
+		excludedVerse{
+			verse: verseNumber,
+			belongsTo{
+				chapter: chapter,
+				belongsTo{
+					book: bookcode
+				}
+			}
+		}
+	}	
+}
+
+'''
+
+verse_mappings_query = '''
+query verses($bib_uid: string){
+	verse(func: uid($bib_uid)) @cascade @normalize{
+		bible,
+		~belongsTo{
+			srcBook:bookNumber,
+			~belongsTo{
+				srcChapter:chapter,
+				~belongsTo{
+					srcVerse: verse,
+					verseMapping{
+						trgVerse: verseNumber,
+						belongsTo{
+							trgChapter: chapter,
+							belongsTo{
+								trgBook: bookcode
+							}
+						}
+					}
+				}
+			}
+		}
+
+	}	
+}
+'''
+
+maxVerse_query = '''query struct($bib_uid: string){
+	struct(func: uid($bib_uid)) {
+		bible,
+		~belongsTo{
+			bookNumber,
+			~belongsTo (orderasc: chapter) @normalize{
+				chapter: chapter,
+	    		~belongsTo{
+					verseNum as verse
+  				}
+  				maxVerse: max(val(verseNum))
+			}
+		}
+	}	
+}
+'''
+
+@app.get("/versification/map", status_code=200, tags=["READ", "Versification"])
+def get_versification_map(bible_name:str):
+	'''Gets a text output as given by versification sniffer, if mapping is added for the bible'''
+	versification = {}
+	versification["maxVerses"] = {}
+	versification["partialVerses"] = {}
+	versification["verseMappings"] = {}
+	versification["excludedVerses"] = []
+	versification["unexcludedVerses"] = {}
+	connect_Graph()
+	bib_res = graph_conn.query_data(bible_uid_query, {"$bib":bible_name})
+	if len(bib_res['bible']) < 1:
+		raise HTTPException("Bible not found:%s", bible_name)
+	bib_uid = bib_res['bible'][0]['uid']
+
+	## exlcudedVerses
+	verses = graph_conn.query_data(exluded_verses_query, {"$bib_uid": str(bib_uid)})
+	for ver in verses['verse']:
+		ref = '%s %s:%s'%(ver['book'], ver['chapter'], ver['verse'])
+		versification["excludedVerses"].append(ref)
+	print(versification["excludedVerses"])
+
+	# verseMappings
+	mapped_verses = graph_conn.query_data(verse_mappings_query, {"$bib_uid": str(bib_uid)})
+
+	for ver in mapped_verses['verse']:
+		key = "%s %s:%s"%(num_book_map[ver["srcBook"]], ver["srcChapter"], ver["srcVerse"])
+		val = "%s %s:%s"%(ver["trgBook"], ver["trgChapter"], ver["trgVerse"])
+		if key in versification['verseMappings']:
+			match_obj = re.match(verse_range_pattern, versification['verseMappings'][key])
+			book = match_obj.group(1)
+			chapter = match_obj.group(2)
+			verse_s = match_obj.group(3)
+			verse_e = match_obj.group(4)
+			if book == ver["trgBook"] and chapter == ver["trgChapter"]:
+				if verse_e is None:
+					range_ = sorted([int(verse_s), ver["trgVerse"]])
+				else:
+					range_ = sorted([int(verse_s), int(verse_e), ver["trgVerse"]])
+				sorted_range = str(range_[0])+"-"+str(range_[-1])
+				val = "%s %s:%s"%(ver["trgBook"], ver["trgChapter"], sorted_range)
+			else:
+				val = versification['verseMappings'][key] +", "+ val
+		versification['verseMappings'][key] = val
+	print(versification['verseMappings'])
+
+	# maxVerses
+	book_chapters = graph_conn.query_data(maxVerse_query, {"$bib_uid": str(bib_uid)})
+	for book in book_chapters['struct'][0]['~belongsTo']:
+		# print(book)
+		book_code = num_book_map[book['bookNumber']]
+		book_entry = []
+		for chap in book['~belongsTo']:
+			book_entry.append(chap["maxVerse"])
+		versification['maxVerses'][book_code] = book_entry
+	print(versification['maxVerses'])
+
+	# partialVerses: to be implemented
+	# unExcludedVerses: to be implemented
+	return versification
+
+parallel_versi_verses_query = '''query verse($book: string, $chapter:int, $verse:int){
+	verse(func: eq(versification, "original")) @cascade @normalize{
+		versification,
+		~belongsTo @filter(eq(bookcode, $book)){
+			bookcode,
+			~belongsTo @filter(eq(chapter, $chapter)){
+				chapter,
+				~belongsTo @filter(eq(verseNumber, $verse)){
+					uid
+					~verseMapping{
+						verse: verseText,
+						verseNum: verse,
+						belongsTo{
+							chapter: chapter,
+							belongsTo{
+								book:book,
+								bookNumber: bookNumber,
+								belongsTo{
+									bible:bible
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}	
+}
+'''
+
+simple_parallel_verses_query = '''query verse($book: string, $chapter:int, $verse:int){
+	verse(func: has(bible)) @normalize @cascade{
+		bible:bible,
+		~belongsTo @filter(eq(bookNumber, $book)){
+			book:book,
+			bookNumber:bookNumber,
+			~belongsTo @filter(eq(chapter, $chapter)){
+				chapter:chapter,
+				~belongsTo @filter(eq(verse, $verse)){
+					verseNumber:verse,
+					verseText:verseText
+				}
+			}
+		}
+	}	
+}
+'''
+
+@app.get("/versification/verse", status_code=200, tags=["READ", "Versification"])
+def get_verse_map(bookcode: BibleBook, chapter:int, verse:int):
+	'''Gets all verses mapped to the original verse given by bcv.'''
+	connect_Graph()
+	var = {"$book": bookcode.upper(), "$chapter":str(chapter), "$verse":str(verse)}
+	mapped_verses = graph_conn.query_data(parallel_versi_verses_query, var)['verse']
+	# print(mapped_verses)
+	res = mapped_verses
+	mapped_bibles = set([item['bible'] for item in mapped_verses])
+
+	var['$book'] = str(book_num_map[bookcode])
+	parallelverses = graph_conn.query_data(simple_parallel_verses_query, var)['verse']
+	for ver in parallelverses:
+		if ver['bible'] not in mapped_bibles:
+			res.append(ver)
+
+	return res
+

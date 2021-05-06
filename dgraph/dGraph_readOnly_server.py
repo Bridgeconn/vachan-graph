@@ -337,15 +337,15 @@ all_bibles_query = '''
 	bibles(func: has(bible), offset: $skip, first: $limit){
 		bible,
 		language,
-		versification : ~belongsTo {
-			book,
-			bookNumber,
-			totalChapters: count(~belongsTo)
-			chapters: ~belongsTo{
-				chapterNumber: chapter,
-				totalVerses: count(~belongsTo)
-			}
-		}
+		# versification : ~belongsTo {
+		# 	book,
+		# 	bookNumber,
+		# 	totalChapters: count(~belongsTo)
+		# 	chapters: ~belongsTo{
+		# 		chapterNumber: chapter,
+		# 		totalVerses: count(~belongsTo)
+		# 	}
+		# }
 	}
 	}
 
@@ -356,15 +356,15 @@ bible_name_query = '''
 	bibles(func: eq(bible, $bib), offset: $skip, first: $limit){
 		bible,
 		language,
-		versification : ~belongsTo {
-			book,
-			bookNumber,
-			totalChapters: count(~belongsTo)
-			chapters: ~belongsTo{
-				chapterNumber: chapter,
-				totalVerses: count(~belongsTo)
-			}
-		}
+		# versification : ~belongsTo {
+		# 	book,
+		# 	bookNumber,
+		# 	totalChapters: count(~belongsTo)
+		# 	chapters: ~belongsTo{
+		# 		chapterNumber: chapter,
+		# 		totalVerses: count(~belongsTo)
+		# 	}
+		# }
 	}
 	}
 
@@ -375,15 +375,15 @@ bible_lang_query = '''
 	bibles(func: has(bible), offset: $skip, first: $limit) @filter(eq(language, $lang)){
 		bible,
 		language,
-		versification : ~belongsTo {
-			book,
-			bookNumber,
-			totalChapters: count(~belongsTo)
-			chapters: ~belongsTo{
-				chapterNumber: chapter,
-				totalVerses: count(~belongsTo)
-			}
-		}
+		# versification : ~belongsTo {
+		# 	book,
+		# 	bookNumber,
+		# 	totalChapters: count(~belongsTo)
+		# 	chapters: ~belongsTo{
+		# 		chapterNumber: chapter,
+		# 		totalVerses: count(~belongsTo)
+		# 	}
+		# }
 	}
 	}
 
@@ -392,18 +392,18 @@ class ChapterVerification(BaseModel):
 	chapterNumber: int
 	totalVerses: int
 
-class BookVersification(BaseModel):
-	bookCode: BibleBook
-	book: str
-	bookNumber: int
-	totalChapters: int
-	chapters: List[ChapterVerification]
+# class BookVersification(BaseModel):
+# 	bookCode: BibleBook
+# 	book: str
+# 	bookNumber: int
+# 	totalChapters: int
+# 	chapters: List[ChapterVerification]
 
 class BibleOut(BaseModel):
 	bible: str
 	language: str
 	bibleLink: AnyUrl
-	versification : List[BookVersification] = None
+	versification : dict = None
 
 class WordOut(BaseModel):
 	word: str
@@ -471,12 +471,9 @@ def get_bibles(bibleName : str = None, language: str = None, versification: bool
 	for i, bib in enumerate(query_res['bibles']):
 		bible_link = "%s/bibles?bibleName=%s;versification=true"%(base_URL, urllib.parse.quote(bib['bible']))
 		query_res['bibles'][i]['bibleLink'] = bible_link
-		if not versification:
-			del query_res['bibles'][i]['versification']
-		else: 
-			for j, book in enumerate(bib['versification']):
-				bookCode = num_book_map[book['bookNumber']]
-				query_res['bibles'][i]['versification'][j]['bookCode'] = bookCode
+		if versification:
+			versi_obj = get_versification_map(bib['bible'])
+			query_res['bibles'][i]['versification'] = versi_obj
 	result = query_res['bibles']
 	return result
 
@@ -1219,3 +1216,203 @@ def get_person_relations(externalUid: str):
 	html_file.write(html_content)
 	html_file.close()
 	return FileResponse("Family-tree.html")
+
+exluded_verses_query = '''query verses($bib_uid: string){
+	verse(func: uid($bib_uid)) @normalize{
+		bible,
+		excludedVerse{
+			verse: verseNumber,
+			belongsTo{
+				chapter: chapter,
+				belongsTo{
+					book: bookcode
+				}
+			}
+		}
+	}	
+}
+
+'''
+
+verse_mappings_query = '''
+query verses($bib_uid: string){
+	verse(func: uid($bib_uid)) @cascade @normalize{
+		bible,
+		~belongsTo{
+			srcBook:bookNumber,
+			~belongsTo{
+				srcChapter:chapter,
+				~belongsTo{
+					srcVerse: verse,
+					verseMapping{
+						trgVerse: verseNumber,
+						belongsTo{
+							trgChapter: chapter,
+							belongsTo{
+								trgBook: bookcode
+							}
+						}
+					}
+				}
+			}
+		}
+
+	}	
+}
+'''
+
+maxVerse_query = '''query struct($bib_uid: string){
+	struct(func: uid($bib_uid)) {
+		bible,
+		~belongsTo{
+			bookNumber,
+			~belongsTo (orderasc: chapter) @normalize{
+				chapter: chapter,
+	    		~belongsTo{
+					verseNum as verse
+  				}
+  				maxVerse: max(val(verseNum))
+			}
+		}
+	}	
+}
+'''
+bible_uid_query = '''
+	query bible($bib: string){
+	bible(func: eq(bible, $bib)){
+		uid
+	}
+	}
+'''
+verse_range_pattern = re.compile(r'([\w\d]\w\w) (\d+):(\d+\w*)\-?(\d+\w*)?$')
+
+
+@app.get("/versification/map", status_code=200, tags=["READ", "Versification"])
+def get_versification_map(bible_name:str):
+	'''Gets a text output as given by versification sniffer, if mapping is added for the bible'''
+	versification = {}
+	versification["maxVerses"] = {}
+	versification["partialVerses"] = {}
+	versification["verseMappings"] = {}
+	versification["excludedVerses"] = []
+	versification["unexcludedVerses"] = {}
+	if not graph_conn:
+		test()
+	bib_res = graph_conn.query_data(bible_uid_query, {"$bib":bible_name})
+	if len(bib_res['bible']) < 1:
+		raise GraphException("Bible not found:%s"%bible_name)
+	bib_uid = bib_res['bible'][0]['uid']
+
+	## exlcudedVerses
+	verses = graph_conn.query_data(exluded_verses_query, {"$bib_uid": str(bib_uid)})
+	for ver in verses['verse']:
+		ref = '%s %s:%s'%(ver['book'], ver['chapter'], ver['verse'])
+		versification["excludedVerses"].append(ref)
+	print(versification["excludedVerses"])
+
+	# verseMappings
+	mapped_verses = graph_conn.query_data(verse_mappings_query, {"$bib_uid": str(bib_uid)})
+
+	for ver in mapped_verses['verse']:
+		key = "%s %s:%s"%(num_book_map[ver["srcBook"]], ver["srcChapter"], ver["srcVerse"])
+		val = "%s %s:%s"%(ver["trgBook"], ver["trgChapter"], ver["trgVerse"])
+		if key in versification['verseMappings']:
+			match_obj = re.match(verse_range_pattern, versification['verseMappings'][key])
+			book = match_obj.group(1)
+			chapter = match_obj.group(2)
+			verse_s = match_obj.group(3)
+			verse_e = match_obj.group(4)
+			if book == ver["trgBook"] and chapter == ver["trgChapter"]:
+				if verse_e is None:
+					range_ = sorted([int(verse_s), ver["trgVerse"]])
+				else:
+					range_ = sorted([int(verse_s), int(verse_e), ver["trgVerse"]])
+				sorted_range = str(range_[0])+"-"+str(range_[-1])
+				val = "%s %s:%s"%(ver["trgBook"], ver["trgChapter"], sorted_range)
+			else:
+				val = versification['verseMappings'][key] +", "+ val
+		versification['verseMappings'][key] = val
+	print(versification['verseMappings'])
+
+	# maxVerses
+	book_chapters = graph_conn.query_data(maxVerse_query, {"$bib_uid": str(bib_uid)})
+	for book in book_chapters['struct'][0]['~belongsTo']:
+		# print(book)
+		book_code = num_book_map[book['bookNumber']]
+		book_entry = []
+		for chap in book['~belongsTo']:
+			book_entry.append(chap["maxVerse"])
+		versification['maxVerses'][book_code] = book_entry
+	print(versification['maxVerses'])
+
+	# partialVerses: to be implemented
+	# unExcludedVerses: to be implemented
+	return versification
+
+parallel_versi_verses_query = '''query verse($book: string, $chapter:int, $verse:int){
+	verse(func: eq(versification, "original")) @cascade @normalize{
+		versification,
+		~belongsTo @filter(eq(bookcode, $book)){
+			bookcode,
+			~belongsTo @filter(eq(chapter, $chapter)){
+				chapter,
+				~belongsTo @filter(eq(verseNumber, $verse)){
+					uid
+					~verseMapping{
+						verse: verseText,
+						verseNum: verse,
+						belongsTo{
+							chapter: chapter,
+							belongsTo{
+								book:book,
+								bookNumber: bookNumber,
+								belongsTo{
+									bible:bible
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}	
+}
+'''
+
+simple_parallel_verses_query = '''query verse($book: string, $chapter:int, $verse:int){
+	verse(func: has(bible)) @normalize @cascade{
+		bible:bible,
+		~belongsTo @filter(eq(bookNumber, $book)){
+			book:book,
+			bookNumber:bookNumber,
+			~belongsTo @filter(eq(chapter, $chapter)){
+				chapter:chapter,
+				~belongsTo @filter(eq(verse, $verse)){
+					verseNumber:verse,
+					verseText:verseText
+				}
+			}
+		}
+	}	
+}
+'''
+
+@app.get("/versification/verse", status_code=200, tags=["READ", "Versification"])
+def get_verse_map(bookcode: BibleBook, chapter:int, verse:int):
+	'''Gets all verses mapped to the original verse given by bcv.'''
+	if not graph_conn:
+		test()
+	var = {"$book": bookcode.upper(), "$chapter":str(chapter), "$verse":str(verse)}
+	mapped_verses = graph_conn.query_data(parallel_versi_verses_query, var)['verse']
+	# print(mapped_verses)
+	res = mapped_verses
+	mapped_bibles = set([item['bible'] for item in mapped_verses])
+
+	var['$book'] = str(book_num_map[bookcode])
+	parallelverses = graph_conn.query_data(simple_parallel_verses_query, var)['verse']
+	for ver in parallelverses:
+		if ver['bible'] not in mapped_bibles:
+			res.append(ver)
+
+	return res
+
