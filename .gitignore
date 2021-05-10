@@ -90,7 +90,7 @@ ENV/
 env.bak/
 venv.bak/
 neo4j/py2neo-Venv/
-dgraph/pydgraph-fastAPI-VENV/
+dgraph/pydgrpah-fastapi-VENV/
 
 # Spyder project settings
 .spyderproject
@@ -105,3 +105,6 @@ dgraph/pydgraph-fastAPI-VENV/
 # mypy
 .mypy_cache/
 
+dgraph/Family-tree.html
+dgraph/static/Family-tree.png
+	

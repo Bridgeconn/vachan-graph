@@ -50,6 +50,9 @@ class dGraph_conn:
 			<spouse>: [uid] @reverse .
 			<sameAs>: [uid] @reverse .
 			<nameLink>: [uid] @reverse .
+			<versification>: string @index(exact) .
+			<excludedVerse>: [uid] @reverse .
+			<verseMapping>: [uid] @reverse .
 		'''
 
 		self.set_schema(schema)
