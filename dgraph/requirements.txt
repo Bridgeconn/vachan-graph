@@ -48,7 +48,7 @@ prompt-toolkit==3.0.7
 protobuf==3.13.0
 ptyprocess==0.6.0
 pycparser==2.20
-pydantic==1.6.1
+pydantic==1.6.2
 pydgraph==20.7.0
 Pygments==2.7.4
 PyMySQL==0.10.1
