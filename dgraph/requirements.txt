@@ -42,7 +42,6 @@ parso==0.7.1
 pexpect==4.8.0
 pickleshare==0.7.5
 Pillow==8.1.1
-pkg-resources==0.0.0
 prometheus-client==0.8.0
 prompt-toolkit==3.0.7
 protobuf==3.13.0
@@ -55,6 +54,7 @@ PyMySQL==0.10.1
 pyparsing==2.4.7
 pyrsistent==0.17.3
 python-dateutil==2.8.1
+python-multipart==0.0.5
 pyzmq==19.0.2
 Send2Trash==1.5.0
 six==1.15.0
