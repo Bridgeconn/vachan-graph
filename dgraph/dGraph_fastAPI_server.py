@@ -911,7 +911,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 			Morph_sequence = ['Role','Type','Mood','Tense','Voice','Person','Case','Gender','Number','Degree']
 			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, Strongs, Morph, Pronunciation, TW, lookup.Code from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(book_num_map[bookcode.value]))
 		else:
-			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(book_num_map[bookcode.value]))
+			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, lookup.Code from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(book_num_map[bookcode.value]))
 	except Exception as e:
 		logging.error('At fetching data from MYSQL')
 		logging.error( e)
@@ -934,7 +934,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 		Chapter = next_row[4]
 		Verse = next_row[5]
 		BookName = next_row[6]
-		book_code = next_row[7]
+		book_code = next_row[-1]
 		if bible_name == "Grk UGNT4 bible":			
 			Strongs = next_row[7]
 			Morph = next_row[8].split(',')
