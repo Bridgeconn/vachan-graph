@@ -810,6 +810,7 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 			if "verseNumber" in content:
 				verse_num = content['verseNumber']
 				verse_text = content['verseText']
+				ref_string = book_code+" "+ str(chapter_num)+":"+str(verse_num)
 				# to find/create verse node
 				variables = {
 					'$chapter': chapNode_uid,
@@ -825,6 +826,7 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 					verseNode = {
 						'dgraph.type': "VerseNode",
 						'verse' : verse_num,
+						'refString': ref_string,
 						'verseText': verse_text,
 						'belongsTo' : {
 							'uid': chapNode_uid 
@@ -907,7 +909,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 	try:
 		if bible_name == 'Grk UGNT4 bible':
 			Morph_sequence = ['Role','Type','Mood','Tense','Voice','Person','Case','Gender','Number','Degree']
-			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, Strongs, Morph, Pronunciation, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(book_num_map[bookcode.value]))
+			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, Strongs, Morph, Pronunciation, TW, lookup.Code from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(book_num_map[bookcode.value]))
 		else:
 			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(book_num_map[bookcode.value]))
 	except Exception as e:
@@ -932,6 +934,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 		Chapter = next_row[4]
 		Verse = next_row[5]
 		BookName = next_row[6]
+		book_code = next_row[7]
 		if bible_name == "Grk UGNT4 bible":			
 			Strongs = next_row[7]
 			Morph = next_row[8].split(',')
@@ -1020,6 +1023,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 			verseNode = {
 				'dgraph.type': "VerseNode",
 				'verse' : Verse,
+				'refString': book_code+" "+str(Chapter)+":"+str(Verse),
 				'belongsTo' : {
 					'uid': chapNode_uid 
 				},

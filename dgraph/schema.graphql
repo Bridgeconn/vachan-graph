@@ -52,6 +52,7 @@ type Verse @dgraph(type: "VerseNode"){
     id: ID!
     verse: Int! @search @dgraph(pred: "verse")
     verseText: String @dgraph(pred: "verseText")
+    refString: String @search @dgraph(pred: "refString")
     belongsTo: Chapter @hasInverse(field, contains) @dgraph(pred: "belongsTo")
     contains: [Word] @hasInverse(field, belongsTo) 
     verseMapping: VersificationVerse @dgraph(pred: "verseMapping") @hasInverse(field, mappedVerses)

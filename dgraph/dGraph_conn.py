@@ -17,6 +17,7 @@ class dGraph_conn:
 			<bookNumber>:int @index(int) .
 			<chapter>:int @index(int) .
 			<verse>:int @index(int) .
+			<refString>: string @index(exact) .
 			<belongsTo>: [uid] @reverse .
 			<translationWord>: string @index(exact) .
 			<StrongsNumber>: int @index(int) .
