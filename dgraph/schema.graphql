@@ -12,7 +12,7 @@ type Strongs @dgraph(type: "StrongsNode"){
     definition: String @dgraph(pred: "definitions")
     strongsNumberExtended: String @dgraph(pred: "strongsNumberExtended")
     englishWord: String @dgraph(pred: "englishWord")
-    presence: [Word] @hasInverse(field, strongsLink)
+    presence: [Word] @dgraph(pred: "~strongsLink")
 }
 
 type TranslationWord @dgraph(type: "TWNode"){
@@ -21,7 +21,7 @@ type TranslationWord @dgraph(type: "TWNode"){
     slNo: Int @dgraph(pred: "slNo")
     twType: String @search @dgraph(pred: "twType")
     description: String @dgraph(pred: "description")
-    presence: [Word] @hasInverse(field, twLink)
+    presence: [Word] @dgraph(pred: "~twLink")
 }
 
 type Bible @dgraph(type: "BibleNode"){
@@ -29,7 +29,7 @@ type Bible @dgraph(type: "BibleNode"){
     bible: String! @search @dgraph(pred: "bible")
     language: String @dgraph(pred: "language")
     version: String @dgraph(pred: "version")
-    contains: [Book] @hasinverse(field, belongsTo)
+    contains: [Book] @dgraph(pred: "~belongsTo")
     excludedVerses: [VersificationVerse] @dgraph(pred: "excludedVerse")
 }
 
@@ -37,15 +37,15 @@ type Book @dgraph(type: "BookNode"){
     id: ID!
     book: String! @search @dgraph(pred: "book")
     bookNumber: Int! @search @dgraph(pred: "bookNumber")
-    belongsTo: Bible @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    contains: [Chapter] @hasInverse(field, belongsTo)
+    belongsTo: Bible @dgraph(pred: "belongsTo")
+    contains: [Chapter] @dgraph(pred: "~belongsTo")
 }
 
 type Chapter @dgraph(type: "ChapterNode"){
     id: ID!
     chapter: Int! @search @dgraph(pred: "chapter")
-    belongsTo: Book @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    contains: [Verse] @hasInverse(field, belongsTo) 
+    belongsTo: Book @dgraph(pred: "belongsTo")
+    contains: [Verse] @dgraph(pred: "~belongsTo") 
 }
 
 type Verse @dgraph(type: "VerseNode"){
@@ -53,20 +53,20 @@ type Verse @dgraph(type: "VerseNode"){
     verse: Int! @search @dgraph(pred: "verse")
     verseText: String @dgraph(pred: "verseText")
     refString: String @search @dgraph(pred: "refString")
-    belongsTo: Chapter @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    contains: [Word] @hasInverse(field, belongsTo) 
-    verseMapping: VersificationVerse @dgraph(pred: "verseMapping") @hasInverse(field, mappedVerses)
+    belongsTo: Chapter @dgraph(pred: "belongsTo")
+    contains: [Word] @dgraph(pred: "~belongsTo") 
+    verseMapping: VersificationVerse @dgraph(pred: "verseMapping") 
 }
 
 type Word @dgraph(type: "WordNode"){
     id: ID!
     word: String @search @dgraph(pred: "word")
     position: Int! @search @dgraph(pred: "position")
-    belongsTo: Chapter @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    alignsTo: Word @hasInverse(field, alignsTo) @dgraph(pred: "alignsTo")
-    strongsLink: Strongs @hasInverse(field, presence) @dgraph(pred: "strongsLink")
-    twLink: Strongs @hasInverse(field, presence) @dgraph(pred: "twLink")
-    nameLink: Strongs @hasInverse(field, presence) @dgraph(pred: "nameLink")
+    belongsTo: Verse @dgraph(pred: "belongsTo")
+    alignsTo: Word @dgraph(pred: "alignsTo")
+    strongsLink: Strongs @dgraph(pred: "strongsLink")
+    twLink: TranslationWord @dgraph(pred: "twLink")
+    nameLink: Name @dgraph(pred: "nameLink")
 }
 
 type Name @dgraph(type: "NameNode"){
@@ -82,40 +82,40 @@ type Name @dgraph(type: "NameNode"){
     deathdate: String @dgraph(pred: "deathdate")
     birthPlaceLabel: String @dgraph(pred: "birthPlaceLabel")
     deathPlaceLabel: String @dgraph(pred: "deathPlaceLabel")
-    father: Name @dgraph(pred: "father") @hasInverse(field, child)
-    mother: Name @dgraph(pred: "mother") @hasInverse(field, child)
-    spouse1: Name @dgraph(pred: "spouse") @hasInverse(field, spouse2)
-    spouse2: Name @hasInverse(field, spouse1)
-    child1: Name @hasInverse(field, father)
-    child2: Name @hasInverse(field, mother)
-    presence: [Word] @hasInverse(field, nameLink)
-    belongsTo: Dictionary @hasInverse(field, contains) @dgraph(pred: "belongsTo")
+    father: Name @dgraph(pred: "father") 
+    mother: Name @dgraph(pred: "mother") 
+    spouse1: Name @dgraph(pred: "spouse") 
+    spouse2: [Name] @dgraph(pred: "~spouse")
+    child1: [Name] @dgraph(pred: "~father")
+    child2: [Name] @dgraph(pred: "~mother")
+    presence: [Word] @dgraph(pred: "~nameLink")
+    belongsTo: Dictionary @dgraph(pred: "belongsTo")
     sameAs: [Name] @dgraph(pred: "sameAs")
 }
 
 type Versification @dgraph(type:"VersificationNode"){
     id: ID!
     versification: String! @dgraph(pred: "versification")
-    contains: [VersificationBook] @hasInverse(field, belongsTo) 
+    contains: [VersificationBook] @dgraph(pred: "~belongsTo") 
 }
 
 type VersificationBook @dgraph(type: "VersificationBookNode"){
     id: ID!
     bookCode: String! @dgraph(pred: "bookcode")
-    belongsTo: Versification @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    contains: [VersificationChapter] @hasInverse(field, belongsTo) 
+    belongsTo: Versification @dgraph(pred: "belongsTo")
+    contains: [VersificationChapter] @dgraph(pred: "~belongsTo") 
 }
 
 type VersificationChapter @dgraph(type: "VersificationChapterNode"){
     id: ID!
     chapter: Int! @dgraph(pred: "chapter")
-    belongsTo: VersificationBook @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    contains: [VersificationVerse] @hasInverse(field, belongsTo) 
+    belongsTo: VersificationBook @dgraph(pred: "belongsTo")
+    contains: [VersificationVerse] @dgraph(pred: "~belongsTo") 
 }
 
 type VersificationVerse @dgraph(type: "VersificationVerseNode"){
     id: ID!
     verseNumber: Int! @dgraph(pred:, "verseNumber")
-    belongsTo: Versification @hasInverse(field, contains) @dgraph(pred: "belongsTo")
-    mappedVerses: [Verse] @hasInverse(field, verseMapping)
+    belongsTo: VersificationChapter @dgraph(pred: "belongsTo")
+    mappedVerses: [Verse] @dgraph(pred: "~verseMapping")
 }
