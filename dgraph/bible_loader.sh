@@ -1,5 +1,5 @@
 # ##### Table names
-name="Greek UGNT4 bible"
+name="Grk UGNT4 bible"
 table="Grk_UGNT4_BibleWord"
 
 

@@ -1152,7 +1152,7 @@ def add_verseTextToBible(bib_node_uid,table_name, bookcode):
 				logging.error('At adding text to verse')
 				logging.error(e)
 				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
-			logging.info('text added for:',LID )
+			logging.info('text added for:'+str(LID) )
 		next_row = cursor.fetchone()
 		# break
 	cursor.close()
@@ -1191,7 +1191,7 @@ bible_query = '''
 def add_alignment(source_bible: str = Body('Hin IRV4 bible'), alignment_table: str = Body('Hin_4_Grk_UGNT4_Alignment'), bookcode: BibleBook = Body('mat')):
 	global graph_conn
 
-	target_bible = 'Greek UGNT4 bible'
+	target_bible = 'Grk UGNT4 bible'
 
 	try:
 		db = pymysql.connect(host="localhost",database=rel_db_name, user="root", password="password", charset='utf8mb4')
