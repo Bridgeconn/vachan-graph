@@ -12,24 +12,24 @@ class dGraph_conn:
 		self.create_client()
 
 		schema = '''
-			<bible>: string @index(exact) .
-			<book>: string @index(exact) .
+			<bible>: string @index(exact, term) .
+			<book>: string @index(exact, term) .
 			<bookNumber>:int @index(int) .
 			<chapter>:int @index(int) .
 			<verse>:int @index(int) .
-			<refString>: string @index(exact) .
+			<refString>: string @index(exact, term) .
 			<belongsTo>: [uid] @reverse .
-			<translationWord>: string @index(exact) .
+			<translationWord>: string @index(exact, term) .
 			<StrongsNumber>: int @index(int) .
 			<position>: int @index(int) .
 			<alignsTo>: [uid] @reverse .
 			<strongsLink>: [uid] @reverse .
-			<twType>: string @index(exact) .
-			<twLink>: uid @reverse .
-			<word>: string @index(exact) .
-			<synonym_set>: string @index(exact) .
-			<wn_lemma>: string @index(exact) .
-			<dictionary>: string @index(exact) .
+			<twType>: string @index(exact, term) .
+			<twLink>: [uid] @reverse .
+			<word>: string @index(exact, term) .
+			<synonym_set>: string @index(exact, term) .
+			<wn_lemma>: string @index(exact, term) .
+			<dictionary>: string @index(exact, term) .
 			<wordnet_link>: [uid] @reverse .
 			<synset>: [uid] @reverse .
 			<root>: [uid] @reverse .
@@ -37,21 +37,21 @@ class dGraph_conn:
 			<hypernym>: [uid] @reverse .
 			<antonym>: [uid] @reverse .
 			<verseEmbeddings>: [uid] @reverse .
-			<cn_term>: string @index(exact) .
-			<collection>: string @index(exact) .
-			<question>: string @index(exact) .
-			<answer>: string @index(exact) .
+			<cn_term>: string @index(exact, term) .
+			<collection>: string @index(exact, term) .
+			<question>: string @index(exact, term) .
+			<answer>: string @index(exact, term) .
 			<referenceVerse>: [uid] @reverse .
-			<language>: string @index(exact) .
-			<title>: string @index(exact) .
+			<language>: string @index(exact, term) .
+			<title>: string @index(exact, term) .
 			<externalUid>: string @index(hash) .
-			<name>: string @index(exact) .
+			<name>: string @index(exact, term) .
 			<father>: [uid] @reverse .
 			<mother>: [uid] @reverse .
 			<spouse>: [uid] @reverse .
 			<sameAs>: [uid] @reverse .
 			<nameLink>: [uid] @reverse .
-			<versification>: string @index(exact) .
+			<versification>: string @index(exact, term) .
 			<excludedVerse>: [uid] @reverse .
 			<verseMapping>: [uid] @reverse .
 		'''
