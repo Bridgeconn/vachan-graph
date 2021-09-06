@@ -2067,7 +2067,7 @@ def add_names():
 			if verse == None:
 				verse = 0
 			variables = {
-				'$bib': "Eng ULB bible",
+				'$bib': "English ULB bible",
 				'$book' : str(book_num_map[book]),
 				'$chapter': str(chapter),
 				'$verse': str(verse)
@@ -2137,7 +2137,7 @@ def add_names():
 			for ref in refs:
 				book, chapter, verse, pos = ref	
 				variables = {
-					'$bib': "Eng ULB bible",
+					'$bib': "English ULB bible",
 					'$book' : str(book),
 					'$chapter': str(chapter),
 					'$verse': str(verse)
@@ -2433,7 +2433,7 @@ def add_versification_orig(versification: dict):
 	'''Create the entire versification structure with the original versification format'''
 	nodename = "original"
 	root_node = {
-		'dgraph.tyep': "VersificationNode",
+		'dgraph.type': "VersificationNode",
 		"versification": nodename}
 	root_node_uid = graph_conn.create_data(root_node)
 	for book in versification['maxVerses']:
