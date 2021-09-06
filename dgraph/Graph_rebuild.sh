@@ -1,10 +1,18 @@
+########NOTE###########
+# activate the virtual environment and start the server with
+# 	uvicorn dGraph_fastAPI_server:app --port=7000
+
+
+
 ################# Full Graph rebuild ###################
+
+
 baseUrl="http://127.0.0.1:7000"
 
 
 curl -X GET "$baseUrl/graph" -H  "accept: application/json"
 curl -X DELETE "$baseUrl/graph" -H  "accept: application/json"
-curl -X GET $baseUrl+"/graph" -H  "accept: application/json"
+curl -X GET "$baseUrl/graph" -H  "accept: application/json"
 curl -X POST localhost:8080/admin/schema --data-binary '@schema.graphql'
 echo -e "\nschemas initialized"
 
@@ -94,10 +102,9 @@ echo -e "\n Adding names"
 curl -X POST "$baseUrl/names" -H  "accept: application/json" -d ""
 
 echo -e "\n Working on versification"
-curl -X POST "$baseUrl/versification/original" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{}"
+curl -X POST "$baseUrl/versification/original" -H  "accept: application/json" -H  "Content-Type: application/json" -d "$(<../../versification-specification/versification-mappings/standard-mappings/org.json)"
 
-for bib in "English ULB bible"  "Hindi IRV4 bible" "Malayalam IRV4 bible" "Eng WEB bible"; do
-	echo "\n Adding versification for $bib"
-	curl -X POST "$baseUrl/versification/map?bible_name=$bib" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{}"
-done	
+echo "\n Adding versification for Hindi IRV4 bible"
+curl -X POST "$baseUrl/versification/map?bible_name=Hindi%20IRV4%20bible" -H  "accept: application/json" -H  "Content-Type: application/json" -d "$(<../../versification-specification/data/output/IRV-hin.json)"
+curl -X POST "$baseUrl/versification/map?bible_name=Eng%20WEB%20bible" -H  "accept: application/json" -H  "Content-Type: application/json" -d "$(<../../versification-specification/data/output/eng-web.json)"
 
