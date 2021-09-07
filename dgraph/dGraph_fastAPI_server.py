@@ -260,7 +260,8 @@ def add_strongs():
 	nodename = 'Greek Strongs'
 
 	# create a dictionary nodename
-	dict_node = { 'dictionary': nodename
+	dict_node = { 'dictionary': nodename,
+				   'dgraph.type': "DictionaryNode"
 			}
 	try:
 		dict_node_uid = graph_conn.create_data(dict_node)
@@ -289,6 +290,7 @@ def add_strongs():
 		EnglishWord = next_row[6]
 
 		strong_node = {
+			'dgraph.type': "StrongsNode",
 			'StrongsNumber':strongID,
 			'pronunciation': Pronunciation,
 			'lexeme': Lexeme,
@@ -452,7 +454,8 @@ def add_translationwords():
 	nodename = 'translation words'
 
 	# create a dictionary nodename
-	dict_node = { 'dictionary': nodename
+	dict_node = { 'dictionary': nodename,
+				  'dgraph.type': "DictionaryNode"
 			}
 	try:
 		dict_node_uid = graph_conn.create_data(dict_node)
@@ -476,6 +479,7 @@ def add_translationwords():
 			word_forms = row[3].split(',')
 			description = row[4]
 			tw_node = {
+				'dgraph.type': "TWNode",
 				'translationWord':tw,
 				'slNo': sl_no,
 				'twType': Type,
@@ -710,7 +714,9 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 
 	if len(bibNode_query_res['bible']) == 0:
 		# create a bible nodename
-		bib_node = { 'bible': bible_name,
+		bib_node = { 
+			'dgraph.type': "BibleNode",
+			'bible': bible_name,
 			'language' : language,
 			'version': str(version)
 				}
@@ -745,6 +751,7 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 		raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 	if len(bookNode_query_res['book']) == 0:
 		bookNode = {
+			'dgraph.type': "BookNode",
 			'book' : book_code,
 			'bookNumber': book_num,
 			'belongsTo' : {
@@ -780,6 +787,7 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 
 		if len(chapNode_query_res['chapter']) == 0:
 			chapNode = {
+				'dgraph.type': "ChapterNode",
 				'chapter' : chapter_num,
 				'belongsTo' : {
 					'uid': bookNode_uid 
@@ -802,6 +810,7 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 			if "verseNumber" in content:
 				verse_num = content['verseNumber']
 				verse_text = content['verseText']
+				ref_string = book_code+" "+ str(chapter_num)+":"+str(verse_num)
 				# to find/create verse node
 				variables = {
 					'$chapter': chapNode_uid,
@@ -815,7 +824,9 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 					raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 				if len(verseNode_query_res['verse']) == 0:
 					verseNode = {
+						'dgraph.type': "VerseNode",
 						'verse' : verse_num,
+						'refString': ref_string,
 						'verseText': verse_text,
 						'belongsTo' : {
 							'uid': chapNode_uid 
@@ -838,6 +849,7 @@ def add_bible_usfm(bible_name: str = Body("Hindi IRV4 bible"), language: str = B
 				for i, word in enumerate(words):
 					# to create a word node
 					wordNode = {
+							'dgraph.type': "WordNode",
 							'word' : word,
 							'belongsTo' : {
 								'uid': verseNode_uid 
@@ -867,7 +879,9 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 
 	if len(bibNode_query_res['bible']) == 0:
 		# create a bible nodename
-		bib_node = { 'bible': bible_name,
+		bib_node = { 
+			'dgraph.type': "BibleNode",
+			'bible': bible_name,
 			'language' : language,
 			'version': str(version)
 				}
@@ -895,9 +909,9 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 	try:
 		if bible_name == 'Grk UGNT4 bible':
 			Morph_sequence = ['Role','Type','Mood','Tense','Voice','Person','Case','Gender','Number','Degree']
-			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, Strongs, Morph, Pronunciation, TW from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(book_num_map[bookcode.value]))
+			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, Strongs, Morph, Pronunciation, TW, lookup.Code from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID = %s order by LID, Position",(book_num_map[bookcode.value]))
 		else:
-			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(book_num_map[bookcode.value]))
+			cursor.execute("Select LID, Position, Word, Map.Book, Chapter, Verse,lookup.Book, lookup.Code from "+tablename+" JOIN Bcv_LidMap as Map ON LID=Map.ID JOIN Bible_Book_Lookup as lookup ON lookup.ID=Map.Book where lookup.ID=%s order by LID, Position",(book_num_map[bookcode.value]))
 	except Exception as e:
 		logging.error('At fetching data from MYSQL')
 		logging.error( e)
@@ -920,6 +934,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 		Chapter = next_row[4]
 		Verse = next_row[5]
 		BookName = next_row[6]
+		book_code = next_row[-1]
 		if bible_name == "Grk UGNT4 bible":			
 			Strongs = next_row[7]
 			Morph = next_row[8].split(',')
@@ -940,6 +955,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 		if len(bookNode_query_res['book']) == 0:
 			bookNode = {
+				'dgraph.type': "BookNode",
 				'book' : BookName,
 				'bookNumber': BookNum,
 				'belongsTo' : {
@@ -973,6 +989,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 
 		if len(chapNode_query_res['chapter']) == 0:
 			chapNode = {
+				'dgraph.type': "ChapterNode",
 				'chapter' : Chapter,
 				'belongsTo' : {
 					'uid': bookNode_uid 
@@ -1004,7 +1021,9 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 			raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
 		if len(verseNode_query_res['verse']) == 0:
 			verseNode = {
+				'dgraph.type': "VerseNode",
 				'verse' : Verse,
+				'refString': book_code+" "+str(Chapter)+":"+str(Verse),
 				'belongsTo' : {
 					'uid': chapNode_uid 
 				},
@@ -1025,6 +1044,7 @@ def add_bible(bible_name: str = Body("Hindi IRV4 bible"), language: str = Body("
 
 		# to create a word node
 		wordNode = {
+				'dgraph.type': "WordNode",
 				'word' : Word,
 				'belongsTo' : {
 					'uid': verseNode_uid 
@@ -1132,7 +1152,7 @@ def add_verseTextToBible(bib_node_uid,table_name, bookcode):
 				logging.error('At adding text to verse')
 				logging.error(e)
 				raise HTTPException(status_code=502, detail="Graph side error. "+str(e))
-			logging.info('text added for:',LID )
+			logging.info('text added for:'+str(LID) )
 		next_row = cursor.fetchone()
 		# break
 	cursor.close()
@@ -1669,7 +1689,9 @@ def add_names():
 	dict_node_query_result = graph_conn.query_data(dict_node_query, variables)
 	if len(dict_node_query_result['dict']) == 0:
 		# create a dictionary nodename
-		dict_node = { 'dictionary': nodename
+		dict_node = { 
+				'dgraph.type': "DictionaryNode",
+				'dictionary': nodename
 				}
 		try:
 			dict_node_uid = graph_conn.create_data(dict_node)
@@ -1708,6 +1730,7 @@ def add_names():
 			desc = label2 + ". "
 
 		name_node = {
+		 "dgraph.type": "NameNode",
 		 "externalUid": external_uid,
 		 "name": label,
 		 "belongsTo": {
@@ -2044,7 +2067,7 @@ def add_names():
 			if verse == None:
 				verse = 0
 			variables = {
-				'$bib': "Eng ULB bible",
+				'$bib': "English ULB bible",
 				'$book' : str(book_num_map[book]),
 				'$chapter': str(chapter),
 				'$verse': str(verse)
@@ -2114,7 +2137,7 @@ def add_names():
 			for ref in refs:
 				book, chapter, verse, pos = ref	
 				variables = {
-					'$bib': "Eng ULB bible",
+					'$bib': "English ULB bible",
 					'$book' : str(book),
 					'$chapter': str(chapter),
 					'$verse': str(verse)
@@ -2409,16 +2432,27 @@ def get_person_relations(externalUid: str):
 def add_versification_orig(versification: dict):
 	'''Create the entire versification structure with the original versification format'''
 	nodename = "original"
-	root_node = {"versification": nodename}
+	root_node = {
+		'dgraph.type': "VersificationNode",
+		"versification": nodename}
 	root_node_uid = graph_conn.create_data(root_node)
 	for book in versification['maxVerses']:
-		book_node = {"bookcode": book, "belongsTo":{"uid":root_node_uid}}
+		book_node = {
+			"dgraphType": "VersificationBookNode",
+			"bookcode": book, 
+			"belongsTo":{"uid":root_node_uid}}
 		book_node_uid = graph_conn.create_data(book_node)
 		for i,chap_max in enumerate(versification['maxVerses'][book]):
-			chapter_node = {"chapter":i+1, "belongsTo":{"uid":book_node_uid}}
+			chapter_node = {
+				"dgraph.type": "VersificationChapterNode",
+				"chapter":i+1, 
+				"belongsTo":{"uid":book_node_uid}}
 			chapter_node_uid = graph_conn.create_data(chapter_node)
 			for verse in range(int(chap_max)):
-				verse_node = {"verseNumber":verse+1, "belongsTo":{"uid":chapter_node_uid}}
+				verse_node = {
+					"dgraph.tyep": "VersificationVerseNode",
+					"verseNumber":verse+1, 
+					"belongsTo":{"uid":chapter_node_uid}}
 				verse_node_uid = graph_conn.create_data(verse_node)
 
 

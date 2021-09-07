@@ -1,0 +1,125 @@
+interface DictionaryItem{
+    belongsTo: [Dictionary] @dgraph(pred: "belongsTo")
+}
+
+type Dictionary @dgraph(type: "DictionaryNode"){
+    id: ID!
+    name: String! @search(by: [term, exact]) @dgraph(pred: "dictionary")
+    contains: [DictionaryItem] @dgraph(pred: "~belongsTo")
+}
+
+type Strongs implements DictionaryItem @dgraph(type: "StrongsNode"){
+    id: ID!
+    strongsNumber: Int! @search @dgraph(pred: "StrongsNumber")
+    pronunciation: String @dgraph(pred: "pronunciation")
+    lexeme: String @dgraph(pred: "lexeme")
+    transliteration: String @dgraph(pred: "transliteration")
+    definition: String @dgraph(pred: "definitions")
+    strongsNumberExtended: String @dgraph(pred: "strongsNumberExtended")
+    englishWord: String @dgraph(pred: "englishWord")
+    presence: [Word] @dgraph(pred: "~strongsLink")
+}
+
+type TranslationWord implements DictionaryItem @dgraph(type: "TWNode"){
+    id: ID!
+    translationWord: String! @search(by: [term, exact]) @dgraph(pred: "translationWord")
+    slNo: Int @dgraph(pred: "slNo")
+    twType: String @search(by: [term, exact]) @dgraph(pred: "twType")
+    description: String @dgraph(pred: "description")
+    presence: [Word] @dgraph(pred: "~twLink")
+}
+
+type Bible @dgraph(type: "BibleNode"){
+    id: ID!
+    bible: String! @search(by: [term, exact]) @dgraph(pred: "bible")
+    language: String @dgraph(pred: "language")
+    version: String @dgraph(pred: "version")
+    contains: [Book] @dgraph(pred: "~belongsTo")
+    excludedVerses: [VersificationVerse] @dgraph(pred: "excludedVerse")
+}
+
+type Book @dgraph(type: "BookNode"){
+    id: ID!
+    book: String! @search(by: [term, exact]) @dgraph(pred: "book")
+    bookNumber: Int! @search @dgraph(pred: "bookNumber")
+    belongsTo: [Bible] @dgraph(pred: "belongsTo")
+    contains: [Chapter] @dgraph(pred: "~belongsTo")
+}
+
+type Chapter @dgraph(type: "ChapterNode"){
+    id: ID!
+    chapter: Int! @search @dgraph(pred: "chapter")
+    belongsTo: [Book] @dgraph(pred: "belongsTo")
+    contains: [Verse] @dgraph(pred: "~belongsTo") 
+}
+
+type Verse @dgraph(type: "VerseNode"){
+    id: ID!
+    verse: Int! @search @dgraph(pred: "verse")
+    verseText: String @dgraph(pred: "verseText")
+    refString: String @search(by: [term, exact]) @dgraph(pred: "refString")
+    belongsTo: [Chapter] @dgraph(pred: "belongsTo")
+    contains: [Word] @dgraph(pred: "~belongsTo") 
+    verseMapping: [VersificationVerse] @dgraph(pred: "verseMapping") 
+}
+
+type Word @dgraph(type: "WordNode"){
+    id: ID!
+    word: String @search(by: [term, exact]) @dgraph(pred: "word")
+    position: Int! @search @dgraph(pred: "position")
+    belongsTo: [Verse] @dgraph(pred: "belongsTo")
+    alignsTo: [Word] @dgraph(pred: "alignsTo")
+    strongsLink: [Strongs] @dgraph(pred: "strongsLink")
+    twLink: [TranslationWord] @dgraph(pred: "twLink")
+    nameLink: [Name] @dgraph(pred: "nameLink")
+}
+
+type Name implements DictionaryItem @dgraph(type: "NameNode"){
+    id: ID!
+    name: String! @search(by: [term, exact]) @dgraph(pred: "name")
+    externalUid: String! @search(by: [hash]) @dgraph(pred: "externalUid")
+    personDescription: String @dgraph(pred: "PersonDescription")
+    description: String @dgraph(pred: "description")
+    itemDescription: String @dgraph(pred: "itemDescription")
+    genderLabel: String @dgraph(pred: "GenderLabel")
+    gender: String @dgraph(pred: "gender")
+    birthdate: String @dgraph(pred: "birthdate")
+    deathdate: String @dgraph(pred: "deathdate")
+    birthPlaceLabel: String @dgraph(pred: "birthPlaceLabel")
+    deathPlaceLabel: String @dgraph(pred: "deathPlaceLabel")
+    father: [Name] @dgraph(pred: "father") 
+    mother: [Name] @dgraph(pred: "mother") 
+    spouse1: [Name] @dgraph(pred: "spouse") 
+    spouse2: [Name] @dgraph(pred: "~spouse")
+    child1: [Name] @dgraph(pred: "~father")
+    child2: [Name] @dgraph(pred: "~mother")
+    presence: [Word] @dgraph(pred: "~nameLink")
+    sameAs: [Name] @dgraph(pred: "sameAs")
+}
+
+type Versification @dgraph(type:"VersificationNode"){
+    id: ID!
+    versification: String! @dgraph(pred: "versification")
+    contains: [VersificationBook] @dgraph(pred: "~belongsTo") 
+}
+
+type VersificationBook @dgraph(type: "VersificationBookNode"){
+    id: ID!
+    bookCode: String! @dgraph(pred: "bookcode")
+    belongsTo: [Versification] @dgraph(pred: "belongsTo")
+    contains: [VersificationChapter] @dgraph(pred: "~belongsTo") 
+}
+
+type VersificationChapter @dgraph(type: "VersificationChapterNode"){
+    id: ID!
+    chapter: Int! @dgraph(pred: "chapter")
+    belongsTo: [VersificationBook] @dgraph(pred: "belongsTo")
+    contains: [VersificationVerse] @dgraph(pred: "~belongsTo") 
+}
+
+type VersificationVerse @dgraph(type: "VersificationVerseNode"){
+    id: ID!
+    verseNumber: Int! @dgraph(pred:, "verseNumber")
+    belongsTo: [VersificationChapter] @dgraph(pred: "belongsTo")
+    mappedVerses: [Verse] @dgraph(pred: "~verseMapping")
+}
