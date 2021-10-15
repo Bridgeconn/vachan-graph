@@ -2,7 +2,7 @@
 A knowledge graph of the Bible and associated processing.
 Built using [DGraph](https://dgraph.io/) graph platform.
 
-The GUI to the graph can be accessed [here](http://128.199.18.6:8000/?dev).
+The GUI to the graph can be accessed [here](http://128.199.18.6:8000/?dev). In order to connect make sure that the `DGraph server URL` is set to: `http://128.199.18.6:8080` (note the port `8080` not `8000`).
 
 Some sample queries to try
 
