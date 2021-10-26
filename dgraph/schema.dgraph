@@ -1,0 +1,137 @@
+
+type DictionaryNode {
+    dictionary
+}
+
+type StrongsNode {
+    StrongsNumber
+    pronunciation
+    lexeme
+    transliteration
+    definitions
+    strongsNumberExtended
+    englishWord
+}
+
+type TWNode {
+    translationWord
+    slNo
+    twType
+    description
+}
+
+type BibleNode {
+    bible
+    language
+    version
+    excludedVerse
+}
+
+type BookNode {
+    book
+    bookNumber
+    belongsTo
+}
+
+type ChapterNode {
+    chapter
+    belongsTo
+}
+
+type VerseNode {
+    verse
+    verseText
+    refString
+    belongsTo
+    verseMapping 
+}
+
+type WordNode {
+    word
+    position
+    belongsTo
+    alignsTo
+    strongsLink
+    twLink
+    nameLink
+}
+
+type NameNode {
+    name
+    externalUid
+    PersonDescription
+    description
+    itemDescription
+    GenderLabel
+    gender
+    birthdate
+    deathdate
+    birthPlaceLabel
+    deathPlaceLabel
+    father 
+    mother 
+    spouse 
+    sameAs
+}
+
+type VersificationNode {
+    versification
+}
+
+type VersificationBookNode {
+    bookcode
+    belongsTo
+}
+
+type VersificationChapterNode {
+    chapter
+    belongsTo
+}
+
+type VersificationVerse @dgraph(type: "VersificationVerseNode"){
+    verseNumber
+    belongsTo
+}
+
+<bible>: string @index(exact, term) .
+<book>: string @index(exact, term) .
+<bookNumber>:int @index(int) .
+<chapter>:int @index(int) .
+<verse>:int @index(int) .
+<refString>: string @index(exact, term) .
+<belongsTo>: [uid] @reverse .
+<translationWord>: string @index(exact, term) .
+<StrongsNumber>: int @index(int) .
+<position>: int @index(int) .
+<alignsTo>: [uid] @reverse .
+<strongsLink>: [uid] @reverse .
+<twType>: string @index(exact, term) .
+<twLink>: [uid] @reverse .
+<word>: string @index(exact, term) .
+<synonym_set>: string @index(exact, term) .
+<wn_lemma>: string @index(exact, term) .
+<dictionary>: string @index(exact, term) .
+<wordnet_link>: [uid] @reverse .
+<synset>: [uid] @reverse .
+<root>: [uid] @reverse .
+<lid>: int @index(int) .
+<hypernym>: [uid] @reverse .
+<antonym>: [uid] @reverse .
+<verseEmbeddings>: [uid] @reverse .
+<cn_term>: string @index(exact, term) .
+<collection>: string @index(exact, term) .
+<question>: string @index(exact, term) .
+<answer>: string @index(exact, term) .
+<referenceVerse>: [uid] @reverse .
+<language>: string @index(exact, term) .
+<title>: string @index(exact, term) .
+<externalUid>: string @index(hash) .
+<name>: string @index(exact, term) .
+<father>: [uid] @reverse .
+<mother>: [uid] @reverse .
+<spouse>: [uid] @reverse .
+<sameAs>: [uid] @reverse .
+<nameLink>: [uid] @reverse .
+<versification>: string @index(exact, term) .
+<excludedVerse>: [uid] @reverse .
+<verseMapping>: [uid] @reverse .
